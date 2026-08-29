@@ -4,6 +4,8 @@ import { ref, watch } from 'vue'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxModal } from '@/ui'
 
+import BreaksEditor from './BreaksEditor.vue'
+
 import {
   useSaveSchedules,
   useSchedules,
@@ -97,8 +99,8 @@ async function submit(): Promise<void> {
   >
     <div class="flex flex-col gap-4">
       <p class="text-sm text-slate-500">
-        Marca los días que trabaja y su franja. Los descansos puntuales y las
-        vacaciones se manejan aparte, sin tocar este horario.
+        Marca los días que trabaja y su franja. Las vacaciones y los bloqueos de
+        un día puntual se manejan aparte, sin tocar este horario.
       </p>
 
       <div class="divide-y divide-slate-100 rounded-md border border-slate-200">
@@ -141,8 +143,15 @@ async function submit(): Promise<void> {
 
       <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
 
+      <!-- Los descansos guardan solos, aparte del horario: son dos decisiones
+           distintas y mezclarlas en un botón obligaría a reenviar la semana
+           entera para mover un almuerzo. -->
+      <div v-if="resource" class="border-t border-slate-100 pt-4">
+        <BreaksEditor :resource-id="resource.id" :resource-name="resource.name" />
+      </div>
+
       <div class="flex justify-end gap-2">
-        <NxButton variant="secondary" :disabled="isPending" @click="emit('close')">Cancelar</NxButton>
+        <NxButton variant="secondary" :disabled="isPending" @click="emit('close')">Cerrar</NxButton>
         <NxButton :loading="isPending" @click="submit">Guardar horario</NxButton>
       </div>
     </div>

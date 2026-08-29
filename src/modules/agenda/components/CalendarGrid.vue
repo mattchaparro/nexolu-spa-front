@@ -91,6 +91,18 @@ function onDrop(event: DragEvent, column: (typeof props.columns)[number]): void 
 
   const minute = minuteFromEvent(event, event.currentTarget as HTMLElement)
 
+  // Misma regla que al tocar un espacio libre: soltar una cita encima del
+  // almuerzo o fuera de la jornada la rebota el backend con 422. Mejor no
+  // moverla en pantalla para volver a ponerla donde estaba un segundo después.
+  const inWindow = column.resource.windows.some(
+    (w) => minute >= toMinutes(w.start) && minute < toMinutes(w.end),
+  )
+
+  if (!inWindow) {
+    dragging.value = null
+    return
+  }
+
   emit('move', {
     id: dragging.value.id,
     date: column.date,
@@ -158,6 +170,21 @@ function blockClass(appointment: GridAppointment): string {
             class="absolute inset-x-0 bg-white"
             :style="windowStyle(window)"
           />
+
+          <!-- Almuerzo y descansos. Van encima de la franja laboral y con su
+               nombre: un hueco gris sin explicación se lee igual que "ya
+               salió", y alguien termina preguntándose por qué no puede
+               agendar ahí. -->
+          <div
+            v-for="(rest, i) in column.resource.breaks ?? []"
+            :key="`b-${i}`"
+            class="pointer-events-none absolute inset-x-0 flex items-center justify-center overflow-hidden bg-slate-100/80"
+            :style="windowStyle(rest)"
+          >
+            <span class="truncate px-1 text-[10px] uppercase tracking-wide text-slate-400">
+              {{ rest.label }}
+            </span>
+          </div>
 
           <!-- Líneas de hora -->
           <div

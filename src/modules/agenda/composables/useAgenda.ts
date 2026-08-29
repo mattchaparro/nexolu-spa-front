@@ -25,11 +25,19 @@ export interface GridWindow {
   end: string
 }
 
+/** Un almuerzo o descanso: hueco dentro de la jornada, con nombre. */
+export interface GridBreak {
+  start: string
+  end: string
+  label: string
+}
+
 export interface GridResource {
   id: number
   name: string
   color: string | null
   windows: GridWindow[]
+  breaks: GridBreak[]
   appointments: GridAppointment[]
 }
 

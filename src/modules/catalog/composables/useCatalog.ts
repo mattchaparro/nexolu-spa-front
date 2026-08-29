@@ -203,3 +203,78 @@ export function useSaveSchedules() {
     },
   })
 }
+
+/*
+|------------------------------------------------------------------------------
+| Almuerzos y descansos
+|------------------------------------------------------------------------------
+| Aparte del horario a propósito: el horario dice cuándo trabaja, el descanso
+| cuándo no se atiende dentro de ese horario. Y a diferencia de un bloqueo, no
+| se le puede pasar por encima ni con horas extra ni agendando a mano.
+*/
+
+export interface ResourceBreak {
+  id: number
+  resource_id: number | null
+  resource_name: string | null
+  /** `business` aplica a todo el equipo; `resource`, a una sola. */
+  scope: 'business' | 'resource'
+  /** Nulo = todos los días. */
+  weekday: number | null
+  start_time: string
+  end_time: string
+  label: string
+  effective_from: string | null
+  effective_to: string | null
+  is_active: boolean
+}
+
+export interface BreakPayload {
+  resource_id: number | null
+  weekday: number | null
+  start_time: string
+  end_time: string
+  label?: string
+}
+
+export function useBreaks(resourceId: Ref<number | null>) {
+  return useQuery({
+    queryKey: ['breaks', resourceId],
+    enabled: () => resourceId.value !== null,
+    queryFn: async () =>
+      (
+        await httpClient.get<ResourceBreak[]>('/breaks', {
+          params: { resource_id: resourceId.value },
+        })
+      ).data,
+  })
+}
+
+function invalidateSchedulingCaches(queryClient: ReturnType<typeof useQueryClient>): void {
+  queryClient.invalidateQueries({ queryKey: ['breaks'] })
+  // La agenda pinta la franja laboral de fondo y la disponibilidad ofrece los
+  // huecos: mover un almuerzo cambia las dos.
+  queryClient.invalidateQueries({ queryKey: ['agenda'] })
+  queryClient.invalidateQueries({ queryKey: ['availability'] })
+}
+
+export function useSaveBreak() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id?: number; payload: BreakPayload }) =>
+      id
+        ? (await httpClient.put(`/breaks/${id}`, payload)).data
+        : (await httpClient.post('/breaks', payload)).data,
+    onSuccess: () => invalidateSchedulingCaches(queryClient),
+  })
+}
+
+export function useDeleteBreak() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (id: number) => (await httpClient.delete(`/breaks/${id}`)).data,
+    onSuccess: () => invalidateSchedulingCaches(queryClient),
+  })
+}
