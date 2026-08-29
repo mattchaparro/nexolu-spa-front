@@ -12,6 +12,9 @@ export interface AppointmentItem {
   starts_at: string
   ends_at: string
   price: number
+  final_price: number | null
+  commission_rate: number | null
+  commission_amount: number | null
 }
 
 export interface Appointment {
@@ -23,6 +26,12 @@ export interface Appointment {
   client_name: string | null
   client_phone: string | null
   notes: string | null
+  is_paid: boolean
+  payment_method?: string | null
+  subtotal: number | null
+  discount_amount: number
+  total: number | null
+  commission_total: number | null
   starts_at: string
   ends_at: string
   label: string
@@ -90,4 +99,25 @@ export async function searchClients(term: string): Promise<ClientOption[]> {
   }
 
   return (await httpClient.get<ClientOption[]>('/clients', { params: { q: term } })).data
+}
+
+export interface CheckoutPayload {
+  id: number
+  payment_method_id: number
+  discount_amount?: number
+  discount_reason?: string
+}
+
+export function useCheckout() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, ...body }: CheckoutPayload) =>
+      (await httpClient.post<Appointment>(`/appointments/${id}/checkout`, body)).data,
+    // Cobrar no libera el horario, asi que la disponibilidad no cambia: solo
+    // hace falta refrescar la agenda.
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] })
+    },
+  })
 }

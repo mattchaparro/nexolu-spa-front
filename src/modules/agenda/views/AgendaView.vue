@@ -6,7 +6,8 @@ import { useAuthStore } from '@/stores/auth.store'
 import { NxButton, NxDatePicker, NxSelect } from '@/ui'
 
 import BookSlotModal from '../components/BookSlotModal.vue'
-import { useAppointments, useCancelAppointment } from '../composables/useAppointments'
+import CheckoutModal from '../components/CheckoutModal.vue'
+import { useAppointments, useCancelAppointment, type Appointment } from '../composables/useAppointments'
 import { useAvailability, useResources, useServices, type Slot } from '../composables/useAvailability'
 
 const auth = useAuthStore()
@@ -15,6 +16,7 @@ const { notify } = useSystemAlert()
 const date = ref(new Date().toISOString().slice(0, 10))
 const serviceId = ref<number | null>(null)
 const slotToBook = ref<Slot | null>(null)
+const toCheckout = ref<Appointment | null>(null)
 
 const { data: services, isLoading: loadingServices } = useServices()
 const { data: resources } = useResources()
@@ -66,6 +68,11 @@ function money(value: number): string {
 function onBooked(): void {
   slotToBook.value = null
   notify('Cita agendada.', 'success')
+}
+
+function onCharged(): void {
+  toCheckout.value = null
+  notify('Servicio cobrado. La comisión quedó registrada.', 'success')
 }
 
 async function cancel(id: number, who: string | null): Promise<void> {
@@ -151,15 +158,30 @@ async function cancel(id: number, who: string | null): Promise<void> {
               <p class="text-xs text-slate-500">
                 {{ appointment.items[0]?.service_name }} · {{ appointment.status_label }}
               </p>
+              <p v-if="appointment.is_paid" class="text-xs text-emerald-700">
+                {{ money(appointment.total ?? 0) }} · comisión
+                {{ money(appointment.commission_total ?? 0) }}
+              </p>
             </div>
-            <NxButton
-              v-if="auth.can('citas.cancelar')"
-              variant="ghost"
-              size="sm"
-              @click="cancel(appointment.id, appointment.client_name)"
-            >
-              Cancelar
-            </NxButton>
+
+            <div class="flex shrink-0 gap-1">
+              <NxButton
+                v-if="!appointment.is_paid && auth.can('caja.cobrar')"
+                variant="outline"
+                size="sm"
+                @click="toCheckout = appointment"
+              >
+                Cobrar
+              </NxButton>
+              <NxButton
+                v-if="!appointment.is_paid && auth.can('citas.cancelar')"
+                variant="ghost"
+                size="sm"
+                @click="cancel(appointment.id, appointment.client_name)"
+              >
+                Cancelar
+              </NxButton>
+            </div>
           </div>
         </div>
 
@@ -185,6 +207,12 @@ async function cancel(id: number, who: string | null): Promise<void> {
       :service="selectedService"
       @close="slotToBook = null"
       @booked="onBooked"
+    />
+
+    <CheckoutModal
+      :appointment="toCheckout"
+      @close="toCheckout = null"
+      @done="onCharged"
     />
   </section>
 </template>
