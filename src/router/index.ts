@@ -66,7 +66,7 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore()
 
   if (to.meta.public) {
@@ -75,6 +75,23 @@ router.beforeEach((to) => {
 
   if (!auth.isAuthenticated) {
     return { name: 'login' }
+  }
+
+  // En una carga directa (F5, o pegar una URL) solo se restaura el token desde
+  // localStorage: el usuario, con sus permisos, no esta en memoria todavia.
+  //
+  // Sin esperar a traerlo, can() devuelve falso para TODO y el guard rebota
+  // cada ruta contra la de inicio, que tambien exige permiso -- redireccion
+  // infinita y pantalla en blanco. Vue Router la detecta y aborta, asi que el
+  // sintoma es una pagina vacia sin ningun error visible.
+  if (!auth.user) {
+    try {
+      await auth.fetchCurrentUser()
+    } catch {
+      // Token vencido o revocado: a login, no a una pantalla rota.
+      auth.clearSession()
+      return { name: 'login' }
+    }
   }
 
   // El guard del router, el menu y el backend leen la MISMA fuente. Duplicar
