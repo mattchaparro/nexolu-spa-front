@@ -65,6 +65,33 @@ const router = createRouter({
       meta: { permission: 'recursos.gestionar' },
     },
 
+    {
+      path: '/resumen',
+      name: 'daily-summary',
+      component: () => import('@/modules/cash/views/DailySummaryView.vue'),
+      meta: { permission: 'reportes.ver', feature: 'reports' },
+    },
+    {
+      path: '/caja',
+      name: 'cash-shift',
+      component: () => import('@/modules/cash/views/CashShiftView.vue'),
+      meta: { permission: 'caja.turno', feature: 'cash_shift' },
+    },
+    {
+      path: '/cierre',
+      name: 'daily-closing',
+      // Cerrar el negocio es distinto de manejar el turno propio: por eso
+      // exige su propio permiso y no basta con `caja.turno`.
+      component: () => import('@/modules/cash/views/DailyClosingView.vue'),
+      meta: { permission: 'caja.cierre', feature: 'cash_closing' },
+    },
+    {
+      path: '/gastos',
+      name: 'expenses',
+      component: () => import('@/modules/cash/views/ExpensesView.vue'),
+      meta: { permission: 'gastos.gestionar', feature: 'expenses' },
+    },
+
     /*
      * Plataforma. Layout propio y oscuro a propósito: confundir este panel
      * con el de un negocio es como alguien termina cambiándole la
