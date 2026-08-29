@@ -187,17 +187,23 @@ export function usePublicChain(
   packageId: Ref<number | null>,
   date: Ref<string | null>,
   resourceId: Ref<number | null>,
+  serviceIds?: Ref<number[]>,
 ) {
   return useQuery({
-    queryKey: ['public', slug, 'chain', packageId, date, resourceId],
-    enabled: () => packageId.value !== null && date.value !== null,
+    queryKey: ['public', slug, 'chain', packageId, serviceIds ?? [], date, resourceId],
+    enabled: () =>
+      date.value !== null && (packageId.value !== null || (serviceIds?.value.length ?? 0) > 0),
     queryFn: async () =>
       (
         await httpClient.get<{ slots: PublicChainSlot[] }>(
           `/public/${slug.value}/availability/chain`,
           {
             params: {
-              package_id: packageId.value,
+              // Un combo manda sobre una selección suelta: el combo trae su
+              // descuento y sus servicios ya definidos.
+              ...(packageId.value
+                ? { package_id: packageId.value }
+                : { 'service_ids[]': serviceIds?.value ?? [] }),
               date: date.value,
               ...(resourceId.value ? { resource_id: resourceId.value } : {}),
             },

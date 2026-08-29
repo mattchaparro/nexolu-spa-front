@@ -36,6 +36,15 @@ const step = ref<1 | 2 | 3 | 4>(1)
 const serviceId = ref<number | null>(null)
 /** Un combo elegido en el paso 1. Excluyente con `serviceId`. */
 const packageId = ref<number | null>(null)
+/**
+ * Varios servicios sueltos, en el orden en que se marcaron.
+ *
+ * No es un combo: se cobran a precio de lista. Es el caso de quien va a
+ * hacerse manos y pies el mismo día sin que el negocio los venda juntos.
+ */
+const chainIds = ref<number[]>([])
+/** El paso 1 está armando una visita de varias cosas. */
+const armando = ref(false)
 const resourceId = ref<number | null>(null)
 const date = ref<string | null>(null)
 const startsAt = ref<string | null>(null)
@@ -67,11 +76,19 @@ const pack = computed<PublicPackage | null>(
   () => packages.value.find((p) => p.id === packageId.value) ?? null,
 )
 
-const daysServiceId = computed(() => serviceId.value ?? pack.value?.services[0]?.id ?? null)
+const daysServiceId = computed(
+  () => serviceId.value ?? pack.value?.services[0]?.id ?? chainIds.value[0] ?? null,
+)
 
 const { data: daysData, isFetching: loadingDays } = usePublicDays(slug, daysServiceId, from, resourceId)
 const { data: slotsData, isFetching: loadingSlots } = usePublicSlots(slug, serviceId, date, resourceId)
-const { data: chainData, isFetching: loadingChain } = usePublicChain(slug, packageId, date, resourceId)
+const { data: chainData, isFetching: loadingChain } = usePublicChain(
+  slug,
+  packageId,
+  date,
+  resourceId,
+  chainIds,
+)
 const { mutateAsync: book, isPending: booking } = useCreatePublicBooking(slug)
 
 const service = computed<PublicService | null>(
@@ -79,7 +96,26 @@ const service = computed<PublicService | null>(
 )
 
 /** Qué se está reservando, dicho en una línea. */
-const whatLabel = computed(() => pack.value?.name ?? service.value?.name ?? null)
+/** Los servicios sueltos elegidos, en el orden en que se marcaron. */
+const chainServices = computed<PublicService[]>(() =>
+  chainIds.value
+    .map((id) => props.page.services.find((s) => s.id === id))
+    .filter((s): s is PublicService => s !== undefined),
+)
+
+const chainTotal = computed(() => chainServices.value.reduce((sum, s) => sum + s.price, 0))
+const chainMinutes = computed(() => chainServices.value.reduce((sum, s) => sum + s.duration_min, 0))
+
+/** La visita tiene varias partes: combo o servicios sueltos encadenados. */
+const isChain = computed(() => pack.value !== null || chainIds.value.length > 0)
+
+const whatLabel = computed(() => {
+  if (pack.value) return pack.value.name
+  if (service.value) return service.value.name
+  if (chainServices.value.length) return chainServices.value.map((s) => s.name).join(' + ')
+
+  return null
+})
 
 /**
  * Quién se puede pedir.
@@ -90,11 +126,13 @@ const whatLabel = computed(() => pack.value?.name ?? service.value?.name ?? null
  * vez de esconder la hora entera.
  */
 const resources = computed<PublicResource[]>(() => {
-  if (pack.value) {
-    const ids = pack.value.services.map((s) => s.id)
+  const varios = pack.value
+    ? pack.value.services.map((s) => s.id)
+    : chainIds.value
 
+  if (varios.length) {
     return props.page.resources.filter((r) =>
-      props.page.services.some((s) => ids.includes(s.id) && s.resource_ids.includes(r.id)),
+      props.page.services.some((s) => varios.includes(s.id) && s.resource_ids.includes(r.id)),
     )
   }
 
@@ -143,6 +181,7 @@ function money(value: number): string {
 function pickService(id: number): void {
   serviceId.value = id
   packageId.value = null
+  chainIds.value = []
   resourceId.value = null
   date.value = null
   startsAt.value = null
@@ -153,6 +192,26 @@ function pickService(id: number): void {
 function pickPackage(id: number): void {
   packageId.value = id
   serviceId.value = null
+  chainIds.value = []
+  resourceId.value = null
+  date.value = null
+  startsAt.value = null
+  chosenChain.value = null
+  step.value = 2
+}
+
+/** Marcar y desmarcar en el paso 1. El ORDEN es el de la visita. */
+function toggleChainService(id: number): void {
+  chainIds.value = chainIds.value.includes(id)
+    ? chainIds.value.filter((x) => x !== id)
+    : [...chainIds.value, id]
+}
+
+function confirmChainServices(): void {
+  if (!chainIds.value.length) return
+
+  serviceId.value = null
+  packageId.value = null
   resourceId.value = null
   date.value = null
   startsAt.value = null
@@ -184,6 +243,12 @@ function pickChain(slot: PublicChainSlot): void {
 function back(): void {
   error.value = null
   if (step.value > 1) step.value = (step.value - 1) as 1 | 2 | 3
+
+  // Volviendo al paso 1 con una visita ya armada, se vuelve a ver armada: si
+  // no, el primer servicio que se toque borraría los otros sin avisar.
+  if (step.value === 1 && chainIds.value.length) {
+    armando.value = true
+  }
 }
 
 function dayLabel(iso: string): string {
@@ -244,6 +309,8 @@ function restart(): void {
   step.value = 1
   serviceId.value = null
   packageId.value = null
+  chainIds.value = []
+  armando.value = false
   resourceId.value = null
   date.value = null
   startsAt.value = null
@@ -333,12 +400,30 @@ function restart(): void {
         <p class="mt-2 text-sm font-medium text-slate-700 sm:col-span-2">Servicios</p>
       </template>
 
+      <!-- Armar una visita de varias cosas.
+           No se pone de entrada: tocar un servicio y seguir es el camino del
+           90% de la gente, y meterle un paso de "marca y confirma" a ese caso
+           lo empeora para todos. -->
+      <button
+        v-if="page.services.length > 1"
+        type="button"
+        class="text-left text-sm text-slate-500 underline sm:col-span-2"
+        @click="armando = !armando"
+      >
+        {{ armando ? 'Prefiero un solo servicio' : '¿Te vas a hacer varias cosas? Arma tu visita' }}
+      </button>
+
       <button
         v-for="item in page.services"
         :key="item.id"
         type="button"
-        class="flex gap-3 rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-slate-400"
-        @click="pickService(item.id)"
+        class="flex gap-3 rounded-lg border bg-white p-3 text-left transition"
+        :class="
+          armando && chainIds.includes(item.id)
+            ? 'border-slate-800 ring-1 ring-slate-800'
+            : 'border-slate-200 hover:border-slate-400'
+        "
+        @click="armando ? toggleChainService(item.id) : pickService(item.id)"
       >
         <img
           v-if="item.image_url"
@@ -347,7 +432,14 @@ function restart(): void {
           class="h-16 w-16 shrink-0 rounded object-cover"
         />
         <span class="min-w-0 flex-1">
-          <span class="block font-medium text-slate-800">{{ item.name }}</span>
+          <span class="block font-medium text-slate-800">
+            {{ item.name }}
+            <!-- El número dice el orden de la visita, que es el orden en que
+                 se marcó: primero las manos, después los pies. -->
+            <span v-if="armando && chainIds.includes(item.id)" class="ml-1 text-xs text-slate-500">
+              {{ chainIds.indexOf(item.id) + 1 }}
+            </span>
+          </span>
           <span v-if="item.description" class="mt-0.5 block line-clamp-2 text-xs text-slate-500">
             {{ item.description }}
           </span>
@@ -355,6 +447,15 @@ function restart(): void {
             {{ money(item.price) }} · {{ item.duration_min }} min
           </span>
         </span>
+      </button>
+
+      <button
+        v-if="armando && chainIds.length"
+        type="button"
+        class="rounded-lg bg-slate-900 px-4 py-2.5 font-medium text-white transition hover:bg-slate-800 sm:col-span-2"
+        @click="confirmChainServices"
+      >
+        Continuar · {{ chainIds.length }} servicios · {{ money(chainTotal) }} · {{ chainMinutes }} min
       </button>
 
       <p v-if="!page.services.length && !packages.length" class="text-sm text-slate-500 sm:col-span-2">
@@ -427,11 +528,12 @@ function restart(): void {
 
         <p v-if="loadingSlots || loadingChain" class="text-sm text-slate-500">Cargando…</p>
 
-        <!-- Combo: la hora es la de la visita completa, no la del primer
-             servicio. Cada botón sabe si todo queda con la misma persona. -->
-        <template v-else-if="pack">
+        <!-- Visita de varias partes: la hora es la de TODA la visita, no la
+             del primer servicio. Cada botón sabe si todo queda con la misma
+             persona. -->
+        <template v-else-if="isChain">
           <p v-if="!chainData?.slots.length" class="text-sm text-slate-500">
-            Ese día no cabe el combo completo. Prueba con otro.
+            Ese día no cabe todo lo que elegiste. Prueba con otro día o con menos servicios.
           </p>
 
           <div v-else class="flex flex-wrap gap-2">
@@ -443,14 +545,17 @@ function restart(): void {
               @click="pickChain(slot)"
             >
               {{ slot.label }}
+              <!-- Si se pidió a alguien, el ✓ es que se le respetó. Marcar en
+                   verde una hora que quedó entera con OTRA persona sería
+                   decirle que sí a algo que no pidió. -->
               <span
-                v-if="slot.same_person"
+                v-if="resourceId ? slot.preferred_honored : slot.same_person"
                 class="ml-1 text-xs text-emerald-600"
                 title="Toda la visita con la misma persona"
               >
                 ✓
               </span>
-              <span v-else class="ml-1 text-xs text-amber-600" title="Se reparte entre dos personas">
+              <span v-else class="ml-1 text-xs text-amber-600" title="Cambia de persona">
                 ⇄
               </span>
             </button>
@@ -484,12 +589,13 @@ function restart(): void {
     <!-- 4. Datos -->
     <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
       <div class="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-700">
-        <template v-if="pack && chosenChain">
-          <b>{{ pack.name }}</b>
-          · {{ money(pack.total) }}
-          <span v-if="pack.discount > 0" class="text-emerald-700">
+        <template v-if="chosenChain">
+          <b>{{ pack ? pack.name : 'Tu visita' }}</b>
+          · {{ money(pack ? pack.total : chainTotal) }}
+          <span v-if="pack && pack.discount > 0" class="text-emerald-700">
             (ahorras {{ money(pack.discount) }})
           </span>
+          <span v-else-if="!pack" class="text-slate-500">· {{ chainMinutes }} min</span>
           <br />
           {{ date ? dayLabel(date) : '' }}
           <!-- Con quién queda cada parte, y por qué, antes de confirmar. Un
