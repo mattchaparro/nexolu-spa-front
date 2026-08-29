@@ -100,7 +100,7 @@ export async function searchClients(term: string): Promise<ClientOption[]> {
     return []
   }
 
-  return (await httpClient.get<ClientOption[]>('/clients', { params: { q: term } })).data
+  return (await httpClient.get<ClientOption[]>('/clients/search', { params: { q: term } })).data
 }
 
 export interface CheckoutPayload {

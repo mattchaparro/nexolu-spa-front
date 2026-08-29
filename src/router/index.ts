@@ -45,6 +45,14 @@ const router = createRouter({
       meta: { permission: 'clientes.ver', feature: 'clients' },
     },
     {
+      path: '/clientes/:id',
+      name: 'client',
+      component: () => import('@/modules/clients/views/ClientDetailView.vue'),
+      // Ver la ficha completa exige mas que poder elegir a alguien en un
+      // buscador: aca esta su historial, cuanto gasta y sus fotos.
+      meta: { permission: 'clientes.historial', feature: 'clients' },
+    },
+    {
       path: '/servicios',
       name: 'services',
       component: () => import('@/modules/catalog/views/ServiceListView.vue'),
