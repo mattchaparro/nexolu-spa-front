@@ -29,6 +29,7 @@ const ITEMS: Array<NavItem & { permission?: string; onlyStaff?: boolean }> = [
   { label: 'Servicios', icon: 'pi pi-sparkles', routeName: 'services', permission: 'servicios.gestionar' },
   { label: 'Equipo', icon: 'pi pi-id-card', routeName: 'resources', permission: 'recursos.gestionar' },
   { label: 'Medios de pago', icon: 'pi pi-credit-card', routeName: 'payment-methods', permission: 'negocio.configurar' },
+  { label: 'Permisos', icon: 'pi pi-shield', routeName: 'permissions', permission: 'permisos.gestionar', featureKey: 'permissions_management' },
 ]
 
 export function useNavItems() {

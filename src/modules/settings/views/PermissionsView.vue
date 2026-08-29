@@ -1,0 +1,286 @@
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
+
+import { useSystemAlert } from '@/composables/useSystemAlert'
+import { httpClient } from '@/services/http/client'
+import { extractErrorMessage } from '@/utils/extractErrorMessage'
+import { useAuthStore } from '@/stores/auth.store'
+import { NxButton } from '@/ui'
+
+interface TeamMember {
+  id: number
+  name: string
+  email: string
+  is_active: boolean
+  is_self: boolean
+  is_admin: boolean
+  resource_name: string | null
+  role: string | null
+  permissions: string[]
+}
+
+interface CatalogPermission {
+  name: string
+  label: string
+  description: string
+  feature: string | null
+  sensitive: boolean
+}
+
+interface CatalogGroup {
+  key: string
+  label: string
+  icon: string
+  permissions: CatalogPermission[]
+}
+
+interface RoleOption {
+  name: string
+  label: string
+  defaults: string[]
+}
+
+interface PermissionsPayload {
+  users: TeamMember[]
+  catalog: CatalogGroup[]
+  roles: RoleOption[]
+}
+
+const auth = useAuthStore()
+const { notify } = useSystemAlert()
+const queryClient = useQueryClient()
+
+const { data, isLoading } = useQuery({
+  queryKey: ['permissions'],
+  queryFn: async () => (await httpClient.get<PermissionsPayload>('/permissions')).data,
+})
+
+const selectedId = ref<number | null>(null)
+const role = ref<string | null>(null)
+const granted = ref<Set<string>>(new Set())
+const error = ref<string | null>(null)
+
+const team = computed(() => data.value?.users ?? [])
+const selected = computed(() => team.value.find((u) => u.id === selectedId.value) ?? null)
+
+// El administrador tiene todo por su rol: la pantalla lo dice en vez de
+// mostrar veinte casillas marcadas que no se pueden tocar.
+const editable = computed(() => selected.value !== null && !selected.value.is_admin && !selected.value.is_self)
+
+/** Solo se ofrecen los permisos de funciones que el negocio tiene encendidas. */
+const catalog = computed<CatalogGroup[]>(() =>
+  (data.value?.catalog ?? [])
+    .map((group) => ({
+      ...group,
+      permissions: group.permissions.filter((p) => !p.feature || auth.hasFeature(p.feature)),
+    }))
+    .filter((group) => group.permissions.length > 0),
+)
+
+watch(
+  team,
+  (users) => {
+    if (selectedId.value === null) {
+      selectedId.value = users.find((u) => !u.is_admin)?.id ?? users[0]?.id ?? null
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  selected,
+  (user) => {
+    role.value = user?.role ?? null
+    granted.value = new Set(user?.permissions ?? [])
+    error.value = null
+  },
+  { immediate: true },
+)
+
+function toggle(name: string): void {
+  const next = new Set(granted.value)
+  next.has(name) ? next.delete(name) : next.add(name)
+  granted.value = next
+}
+
+/** Cambiar de rol re-carga las casillas con las de ese rol, sin guardar. */
+function applyRoleDefaults(name: string): void {
+  role.value = name
+  granted.value = new Set(data.value?.roles.find((r) => r.name === name)?.defaults ?? [])
+}
+
+const changed = computed(() => {
+  if (!selected.value) return false
+  if (role.value !== selected.value.role) return true
+
+  const original = new Set(selected.value.permissions)
+  if (original.size !== granted.value.size) return true
+  return [...granted.value].some((p) => !original.has(p))
+})
+
+const { mutateAsync: save, isPending } = useMutation({
+  mutationFn: async () =>
+    (await httpClient.put(`/permissions/${selectedId.value}`, {
+      role: role.value,
+      permissions: [...granted.value],
+    })).data,
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['permissions'] })
+  },
+})
+
+async function submit(): Promise<void> {
+  error.value = null
+
+  try {
+    await save()
+    notify(`Permisos de ${selected.value?.name} actualizados.`, 'success')
+  } catch (e) {
+    error.value = extractErrorMessage(e, 'No pudimos guardar los permisos.')
+  }
+}
+
+function roleLabel(name: string | null): string {
+  return data.value?.roles.find((r) => r.name === name)?.label ?? '—'
+}
+</script>
+
+<template>
+  <section class="p-6 md:p-8">
+    <header class="mb-6">
+      <h1 class="text-xl font-semibold text-slate-800">Permisos del equipo</h1>
+      <p class="mt-1 max-w-2xl text-sm text-slate-500">
+        Lo que ves marcado es exactamente lo que esa persona puede hacer. Presta atención a los
+        permisos de clientes: tu base con teléfonos es tuya, y quien la ve puede llevársela.
+      </p>
+    </header>
+
+    <p v-if="isLoading" class="text-sm text-slate-500">Cargando…</p>
+
+    <div v-else class="grid gap-6 lg:grid-cols-[18rem_1fr]">
+      <!-- El equipo -->
+      <aside class="divide-y divide-slate-100 self-start rounded-lg border border-slate-200 bg-white">
+        <button
+          v-for="member in team"
+          :key="member.id"
+          type="button"
+          class="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-50"
+          :class="member.id === selectedId ? 'bg-slate-50' : ''"
+          @click="selectedId = member.id"
+        >
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-sm font-medium text-slate-800">{{ member.name }}</span>
+            <span class="block truncate text-xs text-slate-500">
+              {{ member.resource_name ?? member.email }}
+            </span>
+          </span>
+          <span
+            class="shrink-0 rounded px-2 py-0.5 text-xs"
+            :class="member.is_admin ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-600'"
+          >
+            {{ roleLabel(member.role) }}
+          </span>
+        </button>
+      </aside>
+
+      <!-- La persona -->
+      <div v-if="selected" class="min-w-0">
+        <div
+          v-if="selected.is_self"
+          class="mb-4 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          Estos son tus propios permisos. Nadie puede editarse a sí mismo: es lo que evita quedarse
+          fuera de tu propio negocio por un clic.
+        </div>
+
+        <div
+          v-else-if="selected.is_admin"
+          class="mb-4 rounded-md bg-indigo-50 px-4 py-3 text-sm text-indigo-900"
+        >
+          {{ selected.name }} es administradora y tiene todos los permisos por su rol, incluidos los
+          que se agreguen más adelante. Para limitarla, cámbiale primero el rol.
+        </div>
+
+        <!-- Rol -->
+        <div class="mb-5 rounded-lg border border-slate-200 bg-white p-4">
+          <p class="mb-2 text-sm font-medium text-slate-800">Rol</p>
+          <p class="mb-3 text-xs text-slate-500">
+            El rol solo define con qué permisos arranca. A partir de ahí ajustas uno por uno.
+          </p>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="option in (data?.roles ?? []).filter((r) => r.name !== 'admin')"
+              :key="option.name"
+              type="button"
+              class="rounded-full border px-3 py-1 text-sm transition"
+              :class="
+                role === option.name
+                  ? 'border-slate-800 bg-slate-800 text-white'
+                  : 'border-slate-200 text-slate-700 hover:border-slate-400'
+              "
+              :disabled="!editable || isPending"
+              @click="applyRoleDefaults(option.name)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Permisos -->
+        <div class="space-y-4">
+          <div
+            v-for="group in catalog"
+            :key="group.key"
+            class="rounded-lg border border-slate-200 bg-white"
+          >
+            <p class="border-b border-slate-100 px-4 py-2.5 text-sm font-medium text-slate-800">
+              {{ group.label }}
+            </p>
+
+            <label
+              v-for="permission in group.permissions"
+              :key="permission.name"
+              class="flex cursor-pointer items-start gap-3 border-b border-slate-50 px-4 py-3 last:border-b-0"
+              :class="permission.sensitive ? 'bg-amber-50/50' : ''"
+            >
+              <input
+                type="checkbox"
+                class="mt-0.5"
+                :checked="selected.is_admin || granted.has(permission.name)"
+                :disabled="!editable || isPending"
+                @change="toggle(permission.name)"
+              />
+              <span class="min-w-0 flex-1">
+                <span class="flex items-center gap-2">
+                  <span class="text-sm text-slate-800">{{ permission.label }}</span>
+                  <span
+                    v-if="permission.sensitive"
+                    class="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-900"
+                  >
+                    dato sensible
+                  </span>
+                </span>
+                <span class="mt-0.5 block text-xs text-slate-500">{{ permission.description }}</span>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <p v-if="error" class="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          {{ error }}
+        </p>
+
+        <NxButton
+          v-if="editable"
+          class="mt-5"
+          :loading="isPending"
+          :disabled="!changed"
+          @click="submit"
+        >
+          Guardar permisos de {{ selected.name }}
+        </NxButton>
+      </div>
+    </div>
+  </section>
+</template>

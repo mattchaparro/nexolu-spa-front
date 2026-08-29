@@ -80,6 +80,12 @@ const router = createRouter({
       meta: { permission: 'negocio.configurar' },
     },
     {
+      path: '/configuracion/permisos',
+      name: 'permissions',
+      component: () => import('@/modules/settings/views/PermissionsView.vue'),
+      meta: { permission: 'permisos.gestionar', feature: 'permissions_management' },
+    },
+    {
       path: '/resumen',
       name: 'daily-summary',
       component: () => import('@/modules/cash/views/DailySummaryView.vue'),
