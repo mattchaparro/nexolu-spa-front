@@ -1,0 +1,9 @@
+* text=auto eol=lf
+
+# Los scripts de shell corren en Linux. Un CRLF los rompe con
+# "bad interpreter: /usr/bin/env bash^M", y el sintoma no apunta a la causa.
+*.sh text eol=lf
+
+*.css diff=css
+*.html diff=html
+*.md diff=markdown
