@@ -75,7 +75,7 @@ async function save(): Promise<void> {
     <header class="mb-6">
       <h1 class="text-xl font-semibold text-slate-800">Medios de pago</h1>
       <p class="mt-1 text-sm text-slate-500">
-        Elige con qué puede pagar tu clienta. El catálogo lo mantiene Nexolú.
+        Elige con qué pueden pagar tus clientes. El catálogo lo mantiene Nexolú.
       </p>
     </header>
 

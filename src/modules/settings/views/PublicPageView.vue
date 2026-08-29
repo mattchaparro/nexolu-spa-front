@@ -115,7 +115,7 @@ async function copyLink(): Promise<void> {
     <header class="mb-6">
       <h1 class="text-xl font-semibold text-slate-800">Tu página pública</h1>
       <p class="mt-1 max-w-2xl text-sm text-slate-500">
-        Donde tus clientas te encuentran y reservan solas. Compártela en tu Instagram y en tu
+        Donde tus clientes te encuentran y reservan solos. Compártela en tu Instagram y en tu
         WhatsApp.
       </p>
     </header>
@@ -166,7 +166,7 @@ async function copyLink(): Promise<void> {
                 rows="3"
                 maxlength="1000"
                 class="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-slate-800"
-                placeholder="Cuéntale a tu clienta quién eres y qué la espera."
+                placeholder="Cuéntale a tus clientes quién eres y qué los espera."
                 :disabled="saving"
               />
             </label>

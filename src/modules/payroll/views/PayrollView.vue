@@ -227,7 +227,7 @@ const previewMessage = computed(() =>
                   <tr>
                     <th class="px-4 py-2 font-medium">Fecha</th>
                     <th class="px-4 py-2 font-medium">Servicio</th>
-                    <th class="px-4 py-2 font-medium">Clienta</th>
+                    <th class="px-4 py-2 font-medium">Cliente</th>
                     <th class="px-4 py-2 text-right font-medium">Cobrado</th>
                     <th class="px-4 py-2 text-right font-medium">%</th>
                     <th class="px-4 py-2 text-right font-medium">Comisión</th>

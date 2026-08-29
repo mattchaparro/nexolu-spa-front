@@ -119,7 +119,7 @@ async function deletePhoto(photoId: number): Promise<void> {
 
       <!-- Lo que hay que saber ANTES de atender va primero y en amarillo:
            alergias, preferencias. Enterrarlo en una pestaña es como alguien
-           termina usando un producto al que la clienta es alérgica. -->
+           termina usando un producto al que el cliente es alérgico. -->
       <div
         v-if="client.care_notes"
         class="mb-6 rounded-md border-l-4 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900"

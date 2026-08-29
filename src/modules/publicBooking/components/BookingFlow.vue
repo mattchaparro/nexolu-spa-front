@@ -281,8 +281,8 @@ function restart(): void {
           >
             {{ slot.label }}
             <!-- Con "cualquiera" hay que decir con quién queda: enterarse al
-                 llegar al local de que la atiende otra persona es peor que
-                 preguntárselo antes. -->
+                 llegar al local de que atiende otra persona es peor que
+                 preguntarlo antes. -->
             <span v-if="resourceId === null" class="ml-1 text-xs text-slate-400">
               {{ slot.resource_name }}
             </span>

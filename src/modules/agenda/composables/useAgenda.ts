@@ -11,7 +11,7 @@ export interface GridAppointment {
   service_id: number
   status: string
   is_paid: boolean
-  /** Hora visible para la clienta, HH:MM. */
+  /** Hora visible para el cliente, HH:MM. */
   start: string
   end: string
   starts_at: string

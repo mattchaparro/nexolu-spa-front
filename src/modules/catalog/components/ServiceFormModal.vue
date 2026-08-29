@@ -1,4 +1,4 @@
-<script setup lang="ts">
+        El cliente ve <b>{{ duration || 0 }} min</b>; el puesto queda ocupado<script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
@@ -135,7 +135,7 @@ async function submit(): Promise<void> {
       </div>
 
       <p class="-mt-2 text-xs text-slate-500">
-        La clienta ve <b>{{ duration || 0 }} min</b>; el puesto queda ocupado
+        El cliente ve <b>{{ duration || 0 }} min</b>; el puesto queda ocupado
         <b>{{ occupied }} min</b>. La preparación y la limpieza no se cobran.
       </p>
 
