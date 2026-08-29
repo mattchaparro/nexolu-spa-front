@@ -80,6 +80,12 @@ const router = createRouter({
       meta: { permission: 'negocio.configurar' },
     },
     {
+      path: '/configuracion/pagina-publica',
+      name: 'public-page',
+      component: () => import('@/modules/settings/views/PublicPageView.vue'),
+      meta: { permission: 'negocio.configurar', feature: 'online_booking' },
+    },
+    {
       path: '/configuracion/permisos',
       name: 'permissions',
       component: () => import('@/modules/settings/views/PermissionsView.vue'),

@@ -22,6 +22,19 @@ export const httpClient = axios.create({
 })
 
 httpClient.interceptors.request.use((config) => {
+  /*
+   * La página pública va SIN token, aunque quien la mire tenga sesión.
+   *
+   * No es sólo higiene. Esas rutas no exigen autenticación, pero el scope
+   * global de `BelongsToBusiness` en la API sí se activa cuando hay usuario:
+   * la dueña de un spa abriendo la página de otro dispararía un doble filtro
+   * y vería un catálogo vacío. Una página pública tiene que verse igual para
+   * todo el mundo.
+   */
+  if (config.url?.startsWith('/public/')) {
+    return config
+  }
+
   const token = tokenStorage.get()
   if (token) {
     config.headers.Authorization = `Bearer ${token}`

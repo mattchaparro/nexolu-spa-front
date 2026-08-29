@@ -1,10 +1,225 @@
 <script setup lang="ts">
-// Pendiente: fase 06 del blueprint.
+import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+
+import BookingFlow from '../components/BookingFlow.vue'
+import { usePublicPage } from '../composables/usePublicBooking'
+
+const route = useRoute()
+const slug = computed(() => String(route.params.businessSlug ?? ''))
+
+const { data: page, isLoading, isError } = usePublicPage(slug)
+
+/** Servicio elegido desde la lista de arriba, para saltar directo al paso 2. */
+const preselected = ref<number | null>(null)
+
+const bookingRef = ref<HTMLElement | null>(null)
+
+function bookService(id: number | null): void {
+  preselected.value = id
+  bookingRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+watch(page, (value) => {
+  if (value) {
+    document.title = `${value.business.name} · Reservar`
+  }
+})
+
+function money(value: number, currency: string): string {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 0,
+  }).format(value)
+}
+
+/** Días agrupados por franja: "Lun a Vie 9:00–18:00" se lee, siete líneas no. */
+const groupedHours = computed(() => {
+  const days = page.value?.hours ?? []
+  const groups: Array<{ label: string; hours: string }> = []
+
+  for (const day of days) {
+    const hours = day.opens ? `${day.opens} – ${day.closes}` : 'Cerrado'
+    const last = groups[groups.length - 1]
+
+    if (last && last.hours === hours) {
+      last.label = `${last.label.split(' a ')[0]} a ${day.label}`
+    } else {
+      groups.push({ label: day.label, hours })
+    }
+  }
+
+  return groups
+})
 </script>
 
 <template>
-  <section class="p-8">
-    <h1 class="text-xl font-bold">Reservar</h1>
-    <p class="mt-2 text-slate-500">Pendiente: fase 06.</p>
-  </section>
+  <div class="min-h-screen bg-white">
+    <p v-if="isLoading" class="p-10 text-center text-slate-500">Cargando…</p>
+
+    <!-- Un negocio que no existe, está suspendido o no tiene reserva en línea
+         se ve igual: no es asunto de quien pasa por la URL cuál de las tres. -->
+    <div v-else-if="isError || !page" class="flex min-h-screen items-center justify-center p-10">
+      <div class="text-center">
+        <p class="text-lg font-medium text-slate-800">Esta página no está disponible</p>
+        <p class="mt-2 text-sm text-slate-500">
+          Revisa el enlace o escríbele directo al negocio.
+        </p>
+      </div>
+    </div>
+
+    <template v-else>
+      <!-- Portada -->
+      <header class="relative">
+        <div
+          class="h-44 bg-slate-200 bg-cover bg-center sm:h-64"
+          :style="page.business.cover_url ? { backgroundImage: `url(${page.business.cover_url})` } : undefined"
+        />
+
+        <div class="mx-auto max-w-3xl px-5">
+          <div class="-mt-10 flex items-end gap-4">
+            <img
+              v-if="page.business.logo_url"
+              :src="page.business.logo_url"
+              :alt="page.business.name"
+              class="h-20 w-20 rounded-xl border-4 border-white object-cover shadow-sm"
+            />
+            <div
+              v-else
+              class="flex h-20 w-20 items-center justify-center rounded-xl border-4 border-white bg-slate-800 text-2xl font-bold text-white shadow-sm"
+            >
+              {{ page.business.name.charAt(0) }}
+            </div>
+          </div>
+
+          <h1 class="mt-4 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            {{ page.profile.headline }}
+          </h1>
+          <p v-if="page.profile.about" class="mt-2 max-w-2xl text-slate-600">
+            {{ page.profile.about }}
+          </p>
+
+          <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-600">
+            <a
+              v-if="page.business.address"
+              :href="page.profile.maps_url ?? undefined"
+              :target="page.profile.maps_url ? '_blank' : undefined"
+              rel="noopener"
+              class="flex items-center gap-1.5"
+              :class="page.profile.maps_url ? 'underline' : ''"
+            >
+              <i class="pi pi-map-marker" />{{ page.business.address }}
+            </a>
+            <a
+              v-if="page.profile.whatsapp"
+              :href="`https://wa.me/${page.profile.whatsapp.replace(/\D/g, '')}`"
+              target="_blank"
+              rel="noopener"
+              class="flex items-center gap-1.5 underline"
+            >
+              <i class="pi pi-whatsapp" />WhatsApp
+            </a>
+            <a
+              v-if="page.profile.instagram"
+              :href="page.profile.instagram"
+              target="_blank"
+              rel="noopener"
+              class="flex items-center gap-1.5 underline"
+            >
+              <i class="pi pi-instagram" />Instagram
+            </a>
+          </div>
+        </div>
+      </header>
+
+      <main class="mx-auto max-w-3xl px-5 py-10">
+        <!-- Servicios -->
+        <section v-if="page.services.length" class="mb-10">
+          <h2 class="mb-3 text-lg font-semibold text-slate-900">Servicios</h2>
+
+          <div class="divide-y divide-slate-100 rounded-xl border border-slate-200">
+            <div
+              v-for="item in page.services"
+              :key="item.id"
+              class="flex items-center gap-4 p-4"
+            >
+              <img
+                v-if="item.image_url"
+                :src="item.image_url"
+                :alt="item.name"
+                class="h-14 w-14 shrink-0 rounded-lg object-cover"
+              />
+              <div class="min-w-0 flex-1">
+                <p class="font-medium text-slate-800">{{ item.name }}</p>
+                <p v-if="item.description" class="mt-0.5 text-sm text-slate-500">
+                  {{ item.description }}
+                </p>
+                <p class="mt-1 text-sm text-slate-600">
+                  {{ money(item.price, page.business.currency) }} · {{ item.duration_min }} min
+                </p>
+              </div>
+              <button
+                type="button"
+                class="shrink-0 rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 transition hover:border-slate-500"
+                @click="bookService(item.id)"
+              >
+                Reservar
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Reservar -->
+        <section ref="bookingRef" class="mb-10 scroll-mt-4">
+          <h2 class="mb-3 text-lg font-semibold text-slate-900">Reservar tu cita</h2>
+          <BookingFlow :slug="slug" :page="page" :preselected="preselected" />
+        </section>
+
+        <!-- Horario y equipo -->
+        <div class="grid gap-8 sm:grid-cols-2">
+          <section>
+            <h2 class="mb-3 text-lg font-semibold text-slate-900">Horario</h2>
+            <dl class="text-sm">
+              <div
+                v-for="(group, i) in groupedHours"
+                :key="i"
+                class="flex justify-between border-b border-slate-100 py-1.5"
+              >
+                <dt class="text-slate-600">{{ group.label }}</dt>
+                <dd :class="group.hours === 'Cerrado' ? 'text-slate-400' : 'text-slate-800'">
+                  {{ group.hours }}
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <section v-if="page.resources.length">
+            <h2 class="mb-3 text-lg font-semibold text-slate-900">Quiénes te atienden</h2>
+            <div class="flex flex-wrap gap-3">
+              <div v-for="person in page.resources" :key="person.id" class="text-center">
+                <img
+                  v-if="person.photo_url"
+                  :src="person.photo_url"
+                  :alt="person.name"
+                  class="mx-auto h-14 w-14 rounded-full object-cover"
+                />
+                <div
+                  v-else
+                  class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-500"
+                >
+                  {{ person.name.charAt(0) }}
+                </div>
+                <p class="mt-1 text-xs text-slate-600">{{ person.name }}</p>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <footer class="border-t border-slate-100 py-6 text-center text-xs text-slate-400">
+        {{ page.business.name }} · Agenda con Nexolú
+      </footer>
+    </template>
+  </div>
 </template>
