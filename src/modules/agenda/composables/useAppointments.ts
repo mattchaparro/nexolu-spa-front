@@ -38,10 +38,20 @@ export interface Appointment {
   items: AppointmentItem[]
 }
 
+/**
+ * Un servicio suelto, o una visita de varios.
+ *
+ * `items` lleva la hora de CADA tramo y no una sola de arranque: la cadena la
+ * calculó el motor de disponibilidad, con los buffers y los cambios de persona
+ * ya resueltos.
+ */
 export interface BookPayload {
-  service_id: number
-  resource_id: number
-  starts_at: string
+  service_id?: number
+  resource_id?: number
+  starts_at?: string
+  items?: Array<{ service_id: number; resource_id: number; starts_at: string }>
+  /** De qué combo sale, para que el cobro aplique su descuento. */
+  service_package_id?: number | null
   client_id?: number | null
   client_name?: string
   client_phone?: string

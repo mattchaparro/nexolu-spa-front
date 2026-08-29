@@ -73,3 +73,87 @@ export function useAvailability(serviceId: Ref<number | null>, date: Ref<string>
     },
   })
 }
+
+/*
+|------------------------------------------------------------------------------
+| Cadenas y combos
+|------------------------------------------------------------------------------
+| Una visita de varios servicios, uno detrás de otro. Encadenar la respuesta de
+| `useAvailability` a mano no sirve: da huecos que están libres para el primero
+| y no para el tercero.
+*/
+
+export interface ChainLeg {
+  service_id: number
+  service_name: string
+  resource_id: number
+  resource_name: string
+  starts_at: string
+  label: string
+}
+
+export interface ChainSlot {
+  starts_at: string
+  ends_at: string
+  label: string
+  legs: ChainLeg[]
+}
+
+export interface ServicePackage {
+  id: number
+  name: string
+  description: string | null
+  image_url: string | null
+  discount_type: string
+  discount_value: number | null
+  is_active: boolean
+  total_minutes: number
+  list_total: number
+  discount: number
+  total: number
+  savings_percent: number
+  services: Array<{ id: number; name: string; price: number; duration_min: number }>
+}
+
+export interface ChainResponse {
+  date: string
+  services: Array<{ id: number; name: string; duration_min: number; price: number }>
+  total_minutes: number
+  package: ({ id: number; name: string } & {
+    list_total: number
+    discount: number
+    total: number
+    savings_percent: number
+  }) | null
+  slots: ChainSlot[]
+}
+
+export function useChainAvailability(
+  serviceIds: Ref<number[]>,
+  packageId: Ref<number | null>,
+  date: Ref<string>,
+) {
+  return useQuery({
+    queryKey: ['availability', 'chain', serviceIds, packageId, date],
+    enabled: computed(() =>
+      Boolean(date.value) && (packageId.value !== null || serviceIds.value.length > 0),
+    ),
+    queryFn: async () => {
+      const { data } = await httpClient.get<ChainResponse>('/availability/chain', {
+        params: packageId.value
+          ? { package_id: packageId.value, date: date.value }
+          : { 'service_ids[]': serviceIds.value, date: date.value },
+      })
+      return data
+    },
+  })
+}
+
+export function usePackages() {
+  return useQuery({
+    queryKey: ['service-packages'],
+    staleTime: 5 * 60_000,
+    queryFn: async () =>
+      (await httpClient.get<{ packages: ServicePackage[] }>('/service-packages')).data,
+  })
+}
