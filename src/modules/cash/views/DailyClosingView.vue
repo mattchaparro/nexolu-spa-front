@@ -126,6 +126,14 @@ async function undoClosing(id: number, day: string): Promise<void> {
               <p class="mt-1 text-lg font-semibold tabular-nums text-slate-800">
                 {{ money(preview.total_expenses) }}
               </p>
+              <!-- Lo que salió del cajón puede ser más que el gasto del día:
+                   la nómina y el arriendo no son gasto de operar el martes,
+                   pero si se pagaron en efectivo esos billetes no están. Sin
+                   esta línea, quien cuenta ve "gastos $0" y un esperado más
+                   bajo, y no entiende de dónde sale la resta. -->
+              <p v-if="preview.cash_out > preview.total_expenses" class="text-xs text-amber-700">
+                salió de caja {{ money(preview.cash_out) }}
+              </p>
             </article>
 
             <article class="rounded-lg border border-indigo-200 bg-indigo-50 p-3">

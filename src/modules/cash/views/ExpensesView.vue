@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 
+import { usePaymentMethods } from '@/composables/usePaymentMethods'
 import { useSystemAlert } from '@/composables/useSystemAlert'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
-import { httpClient } from '@/services/http/client'
-import { useQuery } from '@tanstack/vue-query'
 import { NxButton, NxDatePicker, NxInput, NxModal, NxSelect } from '@/ui'
 
 import {
@@ -28,16 +27,14 @@ const { data: types } = useExpenseTypes()
 const { mutateAsync: save, isPending: saving } = useSaveExpense()
 const { mutateAsync: remove } = useDeleteExpense()
 
-const { data: methods } = useQuery({
-  queryKey: ['payment-methods'],
-  staleTime: 10 * 60_000,
-  queryFn: async () =>
-    (await httpClient.get<Array<{ id: number; name: string }>>('/payment-methods')).data,
-})
+const { data: methods } = usePaymentMethods()
 
+// El alcance clasifica el gasto; lo que descuenta la caja es el medio de pago.
+// Son dos preguntas distintas: el arriendo no es gasto de operar el martes,
+// pero si lo pagaste en efectivo esos billetes salieron del cajón igual.
 const SCOPES = [
-  { value: 'operacional', label: 'Operacional — sale de la caja del día' },
-  { value: 'administrativo', label: 'Administrativo — no toca la caja' },
+  { value: 'operacional', label: 'Operacional — gasto de la jornada' },
+  { value: 'administrativo', label: 'Administrativo — arriendo, nómina, impuestos' },
 ]
 
 const open = ref(false)
@@ -132,7 +129,7 @@ async function destroy(expense: ExpenseRow): Promise<void> {
         <p class="mt-1 text-lg font-semibold tabular-nums text-slate-800">
           {{ money(data.totals.operacional) }}
         </p>
-        <p class="text-xs text-slate-500">Sale de la caja</p>
+        <p class="text-xs text-slate-500">Gasto de la jornada</p>
       </article>
 
       <article class="rounded-lg border border-slate-200 bg-white p-3">
@@ -140,7 +137,7 @@ async function destroy(expense: ExpenseRow): Promise<void> {
         <p class="mt-1 text-lg font-semibold tabular-nums text-slate-800">
           {{ money(data.totals.administrativo) }}
         </p>
-        <p class="text-xs text-slate-500">No toca la caja</p>
+        <p class="text-xs text-slate-500">Arriendo, nómina, impuestos</p>
       </article>
 
       <article class="rounded-lg border border-slate-200 bg-white p-3">

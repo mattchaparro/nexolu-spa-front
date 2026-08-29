@@ -86,6 +86,18 @@ const router = createRouter({
       meta: { permission: 'permisos.gestionar', feature: 'permissions_management' },
     },
     {
+      path: '/nomina',
+      name: 'payroll',
+      component: () => import('@/modules/payroll/views/PayrollView.vue'),
+      meta: { permission: 'nomina.gestionar', feature: 'payroll' },
+    },
+    {
+      path: '/configuracion/pagos-al-equipo',
+      name: 'compensation',
+      component: () => import('@/modules/payroll/views/CompensationView.vue'),
+      meta: { permission: 'nomina.gestionar', feature: 'payroll' },
+    },
+    {
       path: '/resumen',
       name: 'daily-summary',
       component: () => import('@/modules/cash/views/DailySummaryView.vue'),

@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 
 import { httpClient } from '@/services/http/client'
+import { usePaymentMethods } from '@/composables/usePaymentMethods'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 
@@ -32,12 +33,7 @@ const { data: resources } = useQuery({
     (await httpClient.get<Array<{ id: number; name: string; type: string }>>('/resources')).data,
 })
 
-const { data: methods } = useQuery({
-  queryKey: ['payment-methods'],
-  staleTime: 10 * 60_000,
-  queryFn: async () =>
-    (await httpClient.get<Array<{ id: number; name: string }>>('/payment-methods')).data,
-})
+const { data: methods } = usePaymentMethods()
 
 const staff = computed(() => resources.value?.filter((r) => r.type === 'staff') ?? [])
 

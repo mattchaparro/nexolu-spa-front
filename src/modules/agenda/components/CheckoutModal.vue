@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useQuery } from '@tanstack/vue-query'
 
-import { httpClient } from '@/services/http/client'
+import { usePaymentMethods } from '@/composables/usePaymentMethods'
 import { useAuthStore } from '@/stores/auth.store'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
@@ -37,13 +36,7 @@ const discount = ref('')
 const discountReason = ref('')
 const error = ref<string | null>(null)
 
-const { data: methods } = useQuery({
-  queryKey: ['payment-methods'],
-  queryFn: async () =>
-    (await httpClient.get<Array<{ id: number; name: string; counts_as_cash: boolean }>>('/payment-methods'))
-      .data,
-  staleTime: 10 * 60_000,
-})
+const { data: methods } = usePaymentMethods()
 
 const { mutateAsync, isPending } = useCheckout()
 

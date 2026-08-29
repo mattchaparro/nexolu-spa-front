@@ -15,6 +15,8 @@ export interface CashTotals {
   total_cash: number
   total_other_methods: number
   total_expenses: number
+  /** Todo lo que salió del cajón: gastos del día MÁS nómina y arriendo pagados en efectivo. */
+  cash_out: number
   total_commissions: number
   opening_cash: number
   expected_cash: number

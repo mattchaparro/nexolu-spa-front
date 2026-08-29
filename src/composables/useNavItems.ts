@@ -26,10 +26,12 @@ const ITEMS: Array<NavItem & { permission?: string; onlyStaff?: boolean }> = [
   { label: 'Resumen', icon: 'pi pi-chart-line', routeName: 'daily-summary', permission: 'reportes.ver', featureKey: 'reports' },
   { label: 'Cierre', icon: 'pi pi-lock', routeName: 'daily-closing', permission: 'caja.cierre', featureKey: 'cash_closing' },
   { label: 'Gastos', icon: 'pi pi-receipt', routeName: 'expenses', permission: 'gastos.gestionar', featureKey: 'expenses' },
+  { label: 'Nómina', icon: 'pi pi-money-bill', routeName: 'payroll', permission: 'nomina.gestionar', featureKey: 'payroll' },
   { label: 'Servicios', icon: 'pi pi-sparkles', routeName: 'services', permission: 'servicios.gestionar' },
   { label: 'Equipo', icon: 'pi pi-id-card', routeName: 'resources', permission: 'recursos.gestionar' },
   { label: 'Medios de pago', icon: 'pi pi-credit-card', routeName: 'payment-methods', permission: 'negocio.configurar' },
   { label: 'Permisos', icon: 'pi pi-shield', routeName: 'permissions', permission: 'permisos.gestionar', featureKey: 'permissions_management' },
+  { label: 'Pagos al equipo', icon: 'pi pi-percentage', routeName: 'compensation', permission: 'nomina.gestionar', featureKey: 'payroll' },
 ]
 
 export function useNavItems() {
