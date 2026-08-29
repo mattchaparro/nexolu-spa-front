@@ -125,3 +125,81 @@ export function useCheckout() {
     },
   })
 }
+
+/*
+|------------------------------------------------------------------------------
+| Etapas
+|------------------------------------------------------------------------------
+| El estado de una cita con el vocabulario del negocio. "Confirmada" y
+| "En la silla" son lo que se dice en el mostrador; `confirmed` e `in_progress`
+| son lo que el sistema calcula por debajo.
+*/
+
+export interface StageOption {
+  stage_id: number | null
+  key: string
+  label: string
+  color: string | null
+  maps_to_status: string
+}
+
+export interface StageActionOutcome {
+  label: string
+  status: 'ok' | 'failed' | 'skipped'
+  detail: string | null
+}
+
+export interface StageOptions {
+  current: { status: string; status_label: string; stage_id: number | null }
+  options: StageOption[]
+}
+
+export interface HistoryEntry {
+  id: number
+  at: string
+  from: string | null
+  to: string
+  by: string | null
+  actor: string
+  actions: StageActionOutcome[]
+}
+
+export function useStageOptions(appointmentId: Ref<number | null>) {
+  return useQuery({
+    queryKey: ['appointment-stages', appointmentId],
+    enabled: () => appointmentId.value !== null,
+    queryFn: async () =>
+      (await httpClient.get<StageOptions>(`/appointments/${appointmentId.value}/stages`)).data,
+  })
+}
+
+export function useAppointmentHistory(appointmentId: Ref<number | null>) {
+  return useQuery({
+    queryKey: ['appointment-history', appointmentId],
+    enabled: () => appointmentId.value !== null,
+    queryFn: async () =>
+      (await httpClient.get<HistoryEntry[]>(`/appointments/${appointmentId.value}/history`)).data,
+  })
+}
+
+export function useMoveStage() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, stageId, status }: { id: number; stageId?: number | null; status?: string }) =>
+      (
+        await httpClient.post<{ actions: StageActionOutcome[] }>(`/appointments/${id}/stage`, {
+          stage_id: stageId ?? null,
+          status: status ?? null,
+        })
+      ).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agenda'] })
+      queryClient.invalidateQueries({ queryKey: ['appointments'] })
+      queryClient.invalidateQueries({ queryKey: ['appointment-stages'] })
+      queryClient.invalidateQueries({ queryKey: ['appointment-history'] })
+      // Cobrar puede ser una acción de etapa: la caja del día cambia con ella.
+      queryClient.invalidateQueries({ queryKey: ['cash'] })
+    },
+  })
+}

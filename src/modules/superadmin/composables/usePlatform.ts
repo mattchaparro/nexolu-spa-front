@@ -131,3 +131,82 @@ export function useToggleBusiness() {
     onSuccess: () => invalidatePlatform(queryClient),
   })
 }
+
+/*
+|------------------------------------------------------------------------------
+| Flujos de etapas
+|------------------------------------------------------------------------------
+| El catálogo lo mantiene la plataforma y cada negocio elige uno. Cada etapa
+| apunta a un estado núcleo del que dependen la agenda, la caja y la nómina.
+*/
+
+export interface StageAction {
+  type: string
+  config: Record<string, unknown>
+}
+
+export interface WorkflowStage {
+  id: number
+  key: string
+  label: string
+  color: string
+  sort_order: number
+  maps_to_status: string
+  status_label: string
+  is_initial: boolean
+  actions: StageAction[]
+}
+
+export interface Workflow {
+  id: number
+  name: string
+  description: string | null
+  is_default: boolean
+  is_active: boolean
+  businesses_count: number
+  stages: WorkflowStage[]
+}
+
+export interface ActionMeta {
+  type: string
+  label: string
+  help: string
+  critical: boolean
+  feature: string | null
+  config: string[]
+}
+
+export interface WorkflowCatalog {
+  workflows: Workflow[]
+  statuses: Array<{ value: string; label: string; terminal: boolean }>
+  actions: ActionMeta[]
+  placeholders: string[]
+}
+
+export function useWorkflows() {
+  return useQuery({
+    queryKey: ['sa', 'workflows'],
+    queryFn: async () =>
+      (await httpClient.get<WorkflowCatalog>('/superadmin/workflows')).data,
+  })
+}
+
+export function useSaveWorkflowStages() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, stages }: { id: number; stages: Array<Partial<WorkflowStage>> }) =>
+      (await httpClient.put<Workflow>(`/superadmin/workflows/${id}/stages`, { stages })).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sa', 'workflows'] }),
+  })
+}
+
+export function useCreateWorkflow() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (payload: { name: string; description?: string | null }) =>
+      (await httpClient.post<Workflow>('/superadmin/workflows', payload)).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sa', 'workflows'] }),
+  })
+}

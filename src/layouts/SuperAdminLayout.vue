@@ -9,6 +9,7 @@ const router = useRouter()
 const LINKS = [
   { label: 'Resumen', icon: 'pi pi-chart-bar', routeName: 'sa-dashboard' },
   { label: 'Negocios', icon: 'pi pi-building', routeName: 'sa-businesses' },
+  { label: 'Flujos', icon: 'pi pi-sitemap', routeName: 'sa-workflows' },
 ]
 
 async function signOut(): Promise<void> {

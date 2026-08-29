@@ -146,6 +146,12 @@ const router = createRouter({
       meta: { layout: 'superadmin', superadmin: true },
     },
     {
+      path: '/superadmin/flujos',
+      name: 'sa-workflows',
+      component: () => import('@/modules/superadmin/views/WorkflowListView.vue'),
+      meta: { layout: 'superadmin', superadmin: true },
+    },
+    {
       path: '/superadmin/negocios/:id',
       name: 'sa-business',
       component: () => import('@/modules/superadmin/views/BusinessDetailView.vue'),

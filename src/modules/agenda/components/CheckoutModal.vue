@@ -6,6 +6,8 @@ import { useAuthStore } from '@/stores/auth.store'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 
+import StagePicker from './StagePicker.vue'
+
 import { useCancelAppointment, useCheckout, type Appointment } from '../composables/useAppointments'
 
 const props = defineProps<{ appointment: Appointment | null }>()
@@ -121,6 +123,17 @@ async function submit(): Promise<void> {
           <span>{{ item.service_name }} · {{ item.resource_name }}</span>
           <span class="tabular-nums">{{ money(item.price) }}</span>
         </p>
+      </div>
+
+      <!-- El estado vive arriba del cobro: la mayoría de las veces que se abre
+           esta cita es para confirmarla o marcar que llegó, no para cobrar.
+
+           Mover de etapa NO cierra el modal ni emite `done`: `done` significa
+           "se cobró" y dispara ese aviso. Confirmar una cita y que la pantalla
+           anuncie un cobro que no ocurrió es peor que no avisar nada. La
+           rejilla se refresca sola por invalidación. -->
+      <div class="border-b border-slate-100 pb-4">
+        <StagePicker :appointment-id="appointment.id" />
       </div>
 
       <NxSelect
