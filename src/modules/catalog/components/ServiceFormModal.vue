@@ -1,4 +1,4 @@
-        El cliente ve <b>{{ duration || 0 }} min</b>; el puesto queda ocupado<script setup lang="ts">
+<script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
@@ -166,13 +166,13 @@ async function submit(): Promise<void> {
         </div>
       </div>
 
-      <!-- Quién lo presta. No todas las profesionales hacen todo, y algunas
+      <!-- Quién lo presta. No todos hacen todo, y algunos
            tardan distinto o cobran otro porcentaje en el mismo servicio. -->
       <div>
         <p class="mb-2 text-sm font-medium text-slate-700">¿Quién lo presta?</p>
 
         <p v-if="!staff.length" class="text-sm text-slate-500">
-          Todavía no hay profesionales. Créalas en Equipo.
+          Todavía no hay nadie en el equipo. Agrégalos en Equipo.
         </p>
 
         <div v-else class="divide-y divide-slate-100 rounded-md border border-slate-200">

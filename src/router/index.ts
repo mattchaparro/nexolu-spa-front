@@ -70,7 +70,7 @@ const router = createRouter({
       name: 'my-work',
       component: () => import('@/modules/mywork/views/MyWorkView.vue'),
       // Sin permiso propio: cualquiera que entre puede ver lo suyo. Si no es
-      // una profesional, la pantalla se lo dice.
+      // alguien que atiende, la pantalla se lo dice.
       meta: {},
     },
     {

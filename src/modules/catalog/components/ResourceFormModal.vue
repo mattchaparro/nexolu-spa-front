@@ -139,7 +139,7 @@ async function submit(): Promise<void> {
       </div>
 
       <!-- La cuenta se crea junto con la persona. Separarlo es como se
-           terminan teniendo profesionales en la agenda que no pueden entrar. -->
+           terminan teniendo gente en la agenda que no puede entrar. -->
       <div v-if="!isEditing && isPerson" class="rounded-md border border-slate-200 p-3">
         <p class="mb-3 text-sm font-medium text-slate-700">Acceso al sistema (opcional)</p>
 

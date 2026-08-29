@@ -109,7 +109,7 @@ async function destroy(row: ResourceBreak): Promise<void> {
           <span class="block text-xs text-slate-500">
             {{ dayLabel(row) }}
             <!-- Uno del negocio entero se ve acá pero se edita en otro lado:
-                 tocarlo desde la ficha de una profesional lo cambiaría para
+                 tocarlo desde la ficha de una persona lo cambiaría para
                  todas sin que quien lo hace se entere. -->
             <span v-if="row.scope === 'business'" class="ml-1 text-amber-700">
               · de todo el equipo

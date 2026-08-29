@@ -70,7 +70,7 @@ async function toggleActive(resource: TeamResource): Promise<void> {
 
     <template v-else>
       <p v-if="!team?.length" class="rounded-md bg-slate-100 px-4 py-6 text-sm text-slate-600">
-        Todavía no hay nadie. Agrega la primera profesional para poder agendar.
+        Todavía no hay nadie. Agrega a la primera persona para poder agendar.
       </p>
 
       <div v-if="staff.length" class="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

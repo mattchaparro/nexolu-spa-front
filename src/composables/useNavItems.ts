@@ -12,7 +12,7 @@ import type { NavItem } from '@/types/navigation'
  * responde con 403.
  */
 const ITEMS: Array<NavItem & { permission?: string; onlyStaff?: boolean }> = [
-  // Primero lo suyo: una profesional entra a ver su dia, no la agenda del
+  // Primero lo suyo: quien atiende entra a ver su dia, no la agenda del
   // negocio entero.
   { label: 'Mi día', icon: 'pi pi-user', routeName: 'my-work' },
 

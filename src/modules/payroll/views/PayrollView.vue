@@ -90,7 +90,7 @@ const previewMessage = computed(() =>
       <div>
         <h1 class="text-xl font-semibold text-slate-800">Nómina</h1>
         <p class="mt-1 max-w-2xl text-sm text-slate-500">
-          Lo que le debes a cada profesional desde su última liquidación. El período arranca solo
+          Lo que le debes a cada persona del equipo desde su última liquidación. El período arranca solo
           donde terminó el anterior, así que no hay forma de pagar dos veces lo mismo.
         </p>
       </div>

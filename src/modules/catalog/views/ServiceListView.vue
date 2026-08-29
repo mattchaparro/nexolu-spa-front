@@ -99,7 +99,7 @@ function money(value: number): string {
           </p>
 
           <p class="mt-1 text-xs text-slate-500">
-            {{ service.resource_ids?.length ?? 0 }} profesional(es)
+            {{ service.resource_ids?.length ?? 0 }} del equipo
             <span v-if="!service.is_bookable_online" class="ml-1 text-amber-700">· solo en el local</span>
             <span v-if="!service.is_active" class="ml-1 text-slate-500">· inactivo</span>
           </p>

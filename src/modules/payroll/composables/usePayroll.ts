@@ -105,7 +105,7 @@ export function usePendingPayroll() {
 }
 
 /**
- * El detalle de una profesional. Se desactiva cuando no hay ninguna elegida
+ * El detalle de una persona. Se desactiva cuando no hay ninguna elegida
  * para no disparar una petición a `/payroll/resources/null/preview`.
  */
 export function usePayrollPreview(resourceId: Ref<number | null>) {

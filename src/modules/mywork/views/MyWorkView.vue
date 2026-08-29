@@ -64,7 +64,7 @@ const STATUS_LABELS: Record<string, string> = {
       v-else-if="!data?.resource"
       class="rounded-md bg-slate-100 px-4 py-6 text-sm text-slate-600"
     >
-      {{ data?.message ?? 'Tu usuario no está asociado a una profesional de la agenda.' }}
+      {{ data?.message ?? 'Tu usuario no está asociado a nadie de la agenda.' }}
     </p>
 
     <template v-else>
@@ -100,7 +100,7 @@ const STATUS_LABELS: Record<string, string> = {
       </div>
 
       <!-- Lo que gana ella, no la facturación del negocio: es lo que una
-           profesional viene a mirar. -->
+           del equipo viene a mirar. -->
       <div class="mb-6 grid gap-3 sm:grid-cols-3">
         <article
           v-for="period in [

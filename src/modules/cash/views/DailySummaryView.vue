@@ -85,7 +85,7 @@ const { data, isLoading } = useDailySummary(date)
 
       <div class="grid gap-6 lg:grid-cols-2">
         <article class="rounded-lg border border-slate-200 bg-white p-4">
-          <h2 class="mb-3 text-sm font-medium text-slate-700">Por profesional</h2>
+          <h2 class="mb-3 text-sm font-medium text-slate-700">Por persona</h2>
 
           <p v-if="!data.by_resource.length" class="text-sm text-slate-500">
             Sin citas este día.

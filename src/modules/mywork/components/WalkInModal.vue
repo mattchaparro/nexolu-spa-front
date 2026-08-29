@@ -15,7 +15,7 @@ import { useWalkIn } from '../composables/useMyWork'
 
 const props = defineProps<{
   open: boolean
-  /** Recurso propio, si quien registra es una profesional. */
+  /** Recurso propio, si quien registra atiende. */
   myResourceId: number | null
 }>()
 
@@ -50,7 +50,7 @@ const error = ref<string | null>(null)
 
 const service = computed(() => services.value?.find((s) => s.id === serviceId.value) ?? null)
 
-/** Quien no es profesional tiene que decir quién atendió. */
+/** Quien no atiende tiene que decir quién lo hizo. */
 const mustPickResource = computed(() => props.myResourceId === null)
 
 let timer: ReturnType<typeof setTimeout> | undefined

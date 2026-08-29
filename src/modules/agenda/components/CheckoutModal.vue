@@ -48,7 +48,7 @@ const subtotal = computed(
 const discountValue = computed(() => Math.max(0, Number(discount.value) || 0))
 const total = computed(() => Math.max(0, subtotal.value - discountValue.value))
 
-/** Lo que cada profesional se lleva, con el descuento ya repartido. */
+/** Lo que cada persona se lleva, con el descuento ya repartido. */
 const commissions = computed(() => {
   const items = props.appointment?.items ?? []
 
@@ -171,7 +171,7 @@ async function submit(): Promise<void> {
       </div>
 
       <!-- La comisión se muestra ANTES de confirmar: quien cobra debe poder
-           ver qué se le va a liquidar a cada profesional, no enterarse
+           ver qué se le va a liquidar a cada persona, no enterarse
            después en un reporte. -->
       <div class="text-sm">
         <p class="mb-1 text-xs uppercase tracking-wide text-slate-400">Comisión</p>

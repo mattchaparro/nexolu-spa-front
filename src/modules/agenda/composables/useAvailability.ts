@@ -27,7 +27,7 @@ export interface Service {
   buffer_after_min: number
   occupied_min: number
   price: number
-  /** Quien presta el servicio. Sin esto no se puede filtrar por profesional. */
+  /** Quien presta el servicio. Sin esto no se puede filtrar por persona. */
   resource_ids?: number[]
 }
 

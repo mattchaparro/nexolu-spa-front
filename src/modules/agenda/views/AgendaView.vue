@@ -52,8 +52,8 @@ const { mutateAsync: reschedule } = useReschedule()
 const staff = computed(() => agenda.value?.days[0]?.resources ?? [])
 
 /**
- * En vista de día una columna es una profesional; en vista de semana, un día
- * de una sola profesional. Mostrar la semana de todo el equipo a la vez daría
+ * En vista de día una columna es una persona; en vista de semana, un día
+ * de una sola persona. Mostrar la semana de todo el equipo a la vez daría
  * 21 columnas y ninguna se leería.
  */
 const columns = computed(() => {
@@ -121,6 +121,23 @@ function onPick(payload: { date: string; resourceId: number; time: string }): vo
   }
 }
 
+/**
+ * Agendar sin tocar la rejilla.
+ *
+ * Buscar el hueco a ojo entre columnas es tedioso, y en un teléfono es
+ * directamente impracticable: la rejilla se desplaza a lo ancho y a lo alto y
+ * el objetivo táctil es una franja de 15 minutos. El modal pide el día y
+ * ofrece las horas que de verdad quedan.
+ */
+function openComposer(): void {
+  pick.value = {
+    date: anchor.value,
+    resourceId: null,
+    resourceName: null,
+    time: null,
+  }
+}
+
 async function onMove(payload: {
   id: number
   date: string
@@ -176,6 +193,12 @@ function onOpen(appointment: GridAppointment): void {
       </div>
 
       <div class="flex flex-wrap items-center gap-2">
+        <!-- Primero en el orden de lectura y visualmente destacado: agendar es
+             lo que más se hace en esta pantalla. -->
+        <NxButton v-if="canEdit" size="sm" @click="openComposer">
+          <i class="pi pi-plus mr-1.5 text-xs" />Agendar cita
+        </NxButton>
+
         <div class="flex overflow-hidden rounded-md border border-slate-200">
           <button
             v-for="option in (['day', 'week'] as View[])"
@@ -199,7 +222,7 @@ function onOpen(appointment: GridAppointment): void {
       </div>
     </header>
 
-    <!-- En semana se mira una profesional a la vez: 7 días × 3 personas serían
+    <!-- En semana se mira a una persona a la vez: 7 días × 3 personas serían
          21 columnas y ninguna se leería. -->
     <div v-if="view === 'week' && staff.length > 1" class="mb-3 flex flex-wrap gap-2">
       <button
@@ -221,14 +244,16 @@ function onOpen(appointment: GridAppointment): void {
     <p class="mb-2 text-sm text-slate-500">
       <span v-if="isFetching">Cargando…</span>
       <span v-else>{{ totalAppointments }} cita(s)</span>
-      <span v-if="canEdit" class="ml-2 text-slate-400">
+      <!-- El atajo de la rejilla se menciona sólo donde existe: en un teléfono
+           no se arrastra nada y el texto sólo ocuparía sitio. -->
+      <span v-if="canEdit" class="ml-2 hidden text-slate-400 md:inline">
         · Toca un espacio libre para agendar, arrastra una cita para moverla
       </span>
     </p>
 
     <div class="flex-1 rounded-lg border border-slate-200 bg-white">
       <p v-if="!columns.length" class="px-4 py-10 text-center text-sm text-slate-500">
-        No hay profesionales activas todavía. Agrégalas en Equipo.
+        Todavía no hay nadie en el equipo. Agrega a alguien en Equipo.
       </p>
 
       <CalendarGrid
