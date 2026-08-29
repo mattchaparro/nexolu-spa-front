@@ -12,6 +12,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => Boolean(token.value))
   const business = computed(() => user.value?.business ?? null)
+  /** Propiedad del usuario, no permiso del negocio: no se hereda de un rol. */
+  const isSuperAdmin = computed(() => user.value?.is_super_admin === true)
 
   /**
    * Los queryKey no estan scopeados por negocio: son el mismo cache en memoria
@@ -71,6 +73,7 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     business,
     isAuthenticated,
+    isSuperAdmin,
     login,
     logout,
     fetchCurrentUser,

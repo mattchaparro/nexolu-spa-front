@@ -57,6 +57,34 @@ const router = createRouter({
       meta: { permission: 'recursos.gestionar' },
     },
 
+    /*
+     * Plataforma. Layout propio y oscuro a propósito: confundir este panel
+     * con el de un negocio es como alguien termina cambiándole la
+     * configuración al spa equivocado.
+     */
+    {
+      path: '/superadmin',
+      redirect: { name: 'sa-dashboard' },
+    },
+    {
+      path: '/superadmin/resumen',
+      name: 'sa-dashboard',
+      component: () => import('@/modules/superadmin/views/PlatformDashboardView.vue'),
+      meta: { layout: 'superadmin', superadmin: true },
+    },
+    {
+      path: '/superadmin/negocios',
+      name: 'sa-businesses',
+      component: () => import('@/modules/superadmin/views/BusinessListView.vue'),
+      meta: { layout: 'superadmin', superadmin: true },
+    },
+    {
+      path: '/superadmin/negocios/:id',
+      name: 'sa-business',
+      component: () => import('@/modules/superadmin/views/BusinessDetailView.vue'),
+      meta: { layout: 'superadmin', superadmin: true },
+    },
+
     {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
@@ -92,6 +120,19 @@ router.beforeEach(async (to) => {
       auth.clearSession()
       return { name: 'login' }
     }
+  }
+
+  // La plataforma es una propiedad del usuario, no un permiso del negocio:
+  // ser admin de SU spa no da acceso a los demas.
+  if (to.meta.superadmin) {
+    return auth.isSuperAdmin ? true : { name: 'agenda' }
+  }
+
+  // Un usuario de plataforma no tiene negocio, asi que ninguna pantalla de
+  // negocio le sirve: se le manda a lo suyo en vez de dejarlo rebotar contra
+  // permisos que nunca va a tener.
+  if (auth.isSuperAdmin) {
+    return { name: 'sa-dashboard' }
   }
 
   // El guard del router, el menu y el backend leen la MISMA fuente. Duplicar

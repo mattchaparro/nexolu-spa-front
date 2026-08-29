@@ -32,8 +32,9 @@ export interface User {
   email: string
   phone: string | null
   is_active: boolean
-  business_id: number
+  business_id: number | null
   business: Business | null
+  is_super_admin: boolean
   /** El recurso agendable que representa a este usuario, si presta servicios. */
   resource_id: number | null
   roles: string[]

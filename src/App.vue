@@ -3,6 +3,7 @@ import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import AppLayout from '@/layouts/AppLayout.vue'
+import SuperAdminLayout from '@/layouts/SuperAdminLayout.vue'
 import AuthLayout from '@/layouts/AuthLayout.vue'
 import { useSystemAlert } from '@/composables/useSystemAlert'
 import { useFlashStore } from '@/stores/flash.store'
@@ -15,6 +16,7 @@ const route = useRoute()
 // app para todo lo demas.
 const layout = computed(() => {
   if (route.meta.layout === 'auth') return AuthLayout
+  if (route.meta.layout === 'superadmin') return SuperAdminLayout
   if (route.meta.layout === 'blank') return null
   return AppLayout
 })
