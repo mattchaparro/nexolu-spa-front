@@ -66,6 +66,20 @@ const router = createRouter({
     },
 
     {
+      path: '/mi-dia',
+      name: 'my-work',
+      component: () => import('@/modules/mywork/views/MyWorkView.vue'),
+      // Sin permiso propio: cualquiera que entre puede ver lo suyo. Si no es
+      // una profesional, la pantalla se lo dice.
+      meta: {},
+    },
+    {
+      path: '/configuracion/medios-de-pago',
+      name: 'payment-methods',
+      component: () => import('@/modules/settings/views/PaymentMethodsView.vue'),
+      meta: { permission: 'negocio.configurar' },
+    },
+    {
       path: '/resumen',
       name: 'daily-summary',
       component: () => import('@/modules/cash/views/DailySummaryView.vue'),
