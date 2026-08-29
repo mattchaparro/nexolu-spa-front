@@ -1,0 +1,78 @@
+@import 'tailwindcss';
+@plugin 'tailwindcss-primeui';
+
+/**
+ * Sistema de color disciplinado, a proposito chico: el legacy no tenia
+ * estandar (botones de guardar en rojo, verde y morado segun la pantalla)
+ * y no vamos a repetir eso. Unicas familias de color permitidas en toda
+ * la app, todas ya provistas por Tailwind v4 (no se redefinen aca):
+ *
+ *   - indigo  -> color de marca (acciones primarias, links, foco)
+ *   - slate   -> neutros (texto, bordes, fondos)
+ *   - emerald -> exito / confirmacion (nunca como color decorativo)
+ *   - red     -> destructivo (eliminar, cancelar algo irreversible)
+ *   - amber   -> advertencia
+ *
+ * Ningun otro color de Tailwind (purple, pink, cyan, etc.) sin decidirlo
+ * explicitamente aca primero - ver README.md "Sistema de color".
+ */
+@theme {
+  --font-sans: 'Lato', ui-sans-serif, system-ui, sans-serif;
+}
+
+/**
+ * iOS Safari puede des-zoomear TODA la pagina (no solo scrollear) cuando
+ * detecta contenido mas ancho que el viewport durante el layout inicial -
+ * el candidato tipico es la barra inferior movil de NxSidebar, que es
+ * mas ancha que la pantalla a proposito (scroll horizontal propio via
+ * overflow-x-auto en el <nav>, mientras carga la fuente Lato). Sin este
+ * corte defensivo en html/body, ese des-zoom deja toda la UI (cards,
+ * nav, texto) chica y "0 responsiva" en el telefono, aunque en Chrome/
+ * escritorio se vea perfecto - ningun elemento de la app depende de
+ * scroll horizontal a nivel de pagina, todos los que scrollean lo hacen
+ * en su propio contenedor.
+ */
+html,
+body {
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+}
+
+/**
+ * Clase utilitaria de Material Icons (calcada de app.css del legacy) - el
+ * paquete @fontsource/material-icons solo trae el @font-face, no esta
+ * clase. Es una fuente de ligaduras: el nombre del icono como texto
+ * (ej. "local_bar") se reemplaza por el glifo real via font-feature 'liga'.
+ * Ver main.ts para por que convive con PrimeIcons en vez de reemplazarlo.
+ */
+.material-icons {
+  font-family: 'Material Icons';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  display: inline-block;
+  line-height: 1;
+  text-transform: none;
+  letter-spacing: normal;
+  word-wrap: normal;
+  white-space: nowrap;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'liga';
+  /* @fontsource declara font-display: swap, que para una fuente de
+     ligaduras significa mostrar el nombre crudo del icono ("local_bar")
+     como texto de respaldo mientras carga - se ve como un bug (texto
+     suelto en vez de un icono) en vez de una carga progresiva razonable.
+     Arrancar en opacity:0 y revelar recien cuando la fuente esta lista
+     (ver main.ts, clase .fonts-ready en <html>) cambia ese flash de texto
+     por, en el peor caso, un hueco vacio muy breve - mucho menos notorio. */
+  opacity: 0;
+}
+.fonts-ready .material-icons {
+  opacity: 1;
+}
