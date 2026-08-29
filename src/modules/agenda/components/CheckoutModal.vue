@@ -7,10 +7,27 @@ import { useAuthStore } from '@/stores/auth.store'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 
-import { useCheckout, type Appointment } from '../composables/useAppointments'
+import { useCancelAppointment, useCheckout, type Appointment } from '../composables/useAppointments'
 
 const props = defineProps<{ appointment: Appointment | null }>()
-const emit = defineEmits<{ close: []; done: [] }>()
+const emit = defineEmits<{ close: []; done: []; cancelled: [] }>()
+
+const { mutateAsync: cancelMutation } = useCancelAppointment()
+
+async function cancelAppointment(): Promise<void> {
+  if (!props.appointment) {
+    return
+  }
+
+  const who = props.appointment.client_name ?? 'este cliente'
+
+  if (!window.confirm(`¿Cancelar la cita de ${who}? El horario vuelve a quedar libre.`)) {
+    return
+  }
+
+  await cancelMutation({ id: props.appointment.id })
+  emit('cancelled')
+}
 
 const auth = useAuthStore()
 const open = computed(() => props.appointment !== null)
@@ -164,11 +181,26 @@ async function submit(): Promise<void> {
 
       <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
 
-      <div class="flex justify-end gap-2">
-        <NxButton variant="secondary" :disabled="isPending" @click="emit('close')">Cancelar</NxButton>
-        <NxButton :loading="isPending" :disabled="!canSubmit" @click="submit">
-          Cobrar {{ money(total) }}
+      <div class="flex items-center justify-between gap-2">
+        <!-- Cancelar la cita vive aca porque este modal es, en la practica, el
+             detalle de la cita: es donde se actua sobre ella. -->
+        <NxButton
+          v-if="auth.can('citas.cancelar')"
+          variant="ghost"
+          size="sm"
+          :disabled="isPending"
+          @click="cancelAppointment"
+        >
+          Cancelar cita
         </NxButton>
+        <span v-else />
+
+        <div class="flex gap-2">
+          <NxButton variant="secondary" :disabled="isPending" @click="emit('close')">Cerrar</NxButton>
+          <NxButton :loading="isPending" :disabled="!canSubmit" @click="submit">
+            Cobrar {{ money(total) }}
+          </NxButton>
+        </div>
       </div>
     </div>
   </NxModal>

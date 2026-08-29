@@ -69,6 +69,7 @@ export function useBookAppointment() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['availability'] })
       queryClient.invalidateQueries({ queryKey: ['appointments'] })
+      queryClient.invalidateQueries({ queryKey: ['agenda'] })
     },
   })
 }
@@ -82,6 +83,7 @@ export function useCancelAppointment() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['availability'] })
       queryClient.invalidateQueries({ queryKey: ['appointments'] })
+      queryClient.invalidateQueries({ queryKey: ['agenda'] })
     },
   })
 }
@@ -115,9 +117,11 @@ export function useCheckout() {
     mutationFn: async ({ id, ...body }: CheckoutPayload) =>
       (await httpClient.post<Appointment>(`/appointments/${id}/checkout`, body)).data,
     // Cobrar no libera el horario, asi que la disponibilidad no cambia: solo
-    // hace falta refrescar la agenda.
+    // hacen falta las dos vistas de la agenda, que muestran el estado y el
+    // total cobrado.
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appointments'] })
+      queryClient.invalidateQueries({ queryKey: ['agenda'] })
     },
   })
 }

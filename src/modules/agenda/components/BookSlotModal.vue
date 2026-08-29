@@ -2,20 +2,31 @@
 import { computed, ref, watch } from 'vue'
 
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
-import { NxButton, NxInput, NxModal } from '@/ui'
+import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 
 import { searchClients, useBookAppointment, type ClientOption } from '../composables/useAppointments'
-import type { Service, Slot } from '../composables/useAvailability'
+import type { Service } from '../composables/useAvailability'
+
+export interface SlotPick {
+  date: string
+  resourceId: number
+  resourceName: string
+  /** HH:MM en hora del negocio. */
+  time: string
+}
 
 const props = defineProps<{
-  slot: Slot | null
-  service: Service | null
+  pick: SlotPick | null
+  services: Service[]
+  /** Servicio preseleccionado, normalmente el del filtro de la agenda. */
+  defaultServiceId: number | null
 }>()
 
 const emit = defineEmits<{ close: []; booked: [] }>()
 
-const open = computed(() => props.slot !== null)
+const open = computed(() => props.pick !== null)
 
+const serviceId = ref<number | null>(null)
 const term = ref('')
 const results = ref<ClientOption[]>([])
 const selected = ref<ClientOption | null>(null)
@@ -26,7 +37,15 @@ const conflict = ref(false)
 
 const { mutateAsync, isPending } = useBookAppointment()
 
-// Buscador con retraso: sin esto se dispara una petición por tecla.
+const service = computed(() => props.services.find((s) => s.id === serviceId.value) ?? null)
+
+/** Solo los servicios que esta profesional presta. */
+const available = computed(() =>
+  props.pick
+    ? props.services.filter((s) => s.resource_ids?.includes(props.pick!.resourceId) ?? true)
+    : [],
+)
+
 let timer: ReturnType<typeof setTimeout> | undefined
 watch(term, (value) => {
   selected.value = null
@@ -37,15 +56,22 @@ watch(term, (value) => {
 })
 
 watch(open, (isOpen) => {
-  if (isOpen) {
-    term.value = ''
-    results.value = []
-    selected.value = null
-    phone.value = ''
-    notes.value = ''
-    error.value = null
-    conflict.value = false
+  if (!isOpen) {
+    return
   }
+
+  // Si la profesional no presta el servicio del filtro, se elige el primero
+  // que sí presta en vez de dejar el campo en algo imposible.
+  const preferred = available.value.find((s) => s.id === props.defaultServiceId)
+  serviceId.value = preferred?.id ?? available.value[0]?.id ?? null
+
+  term.value = ''
+  results.value = []
+  selected.value = null
+  phone.value = ''
+  notes.value = ''
+  error.value = null
+  conflict.value = false
 })
 
 function choose(client: ClientOption): void {
@@ -54,10 +80,12 @@ function choose(client: ClientOption): void {
   results.value = []
 }
 
-const canSubmit = computed(() => term.value.trim().length > 1 && !isPending.value)
+const canSubmit = computed(
+  () => term.value.trim().length > 1 && serviceId.value !== null && !isPending.value,
+)
 
 async function submit(): Promise<void> {
-  if (!props.slot || !props.service) {
+  if (!props.pick || serviceId.value === null) {
     return
   }
 
@@ -66,23 +94,18 @@ async function submit(): Promise<void> {
 
   try {
     await mutateAsync({
-      service_id: props.service.id,
-      resource_id: props.slot.resource_id,
-      starts_at: props.slot.starts_at,
+      service_id: serviceId.value,
+      resource_id: props.pick.resourceId,
+      // El backend interpreta esta hora en la zona del negocio.
+      starts_at: `${props.pick.date} ${props.pick.time}:00`,
       client_id: selected.value?.id ?? null,
-      // Con cliente elegido el nombre igual viaja: la cita guarda con quién
-      // fue, aunque después alguien edite o borre la ficha del cliente.
       client_name: selected.value?.full_name ?? term.value.trim(),
       client_phone: selected.value ? undefined : phone.value.trim() || undefined,
       notes: notes.value.trim() || undefined,
     })
     emit('booked')
   } catch (e) {
-    const status = (e as { response?: { status?: number } }).response?.status
-
-    if (status === 409) {
-      // Alguien tomó el horario mientras esta pantalla estaba abierta. No es
-      // un error del sistema: la lista ya se recargó sola.
+    if ((e as { response?: { status?: number } }).response?.status === 409) {
       conflict.value = true
       return
     }
@@ -94,11 +117,14 @@ async function submit(): Promise<void> {
 
 <template>
   <NxModal :model-value="open" title="Agendar cita" @update:model-value="emit('close')">
-    <div v-if="slot && service" class="flex flex-col gap-4">
+    <div v-if="pick" class="flex flex-col gap-4">
       <div class="rounded-md bg-slate-50 px-4 py-3 text-sm">
-        <p class="font-medium text-slate-800">{{ service.name }}</p>
-        <p class="text-slate-600">
-          {{ slot.label }} con {{ slot.resource_name }} · {{ service.duration_min }} min
+        <p class="font-medium text-slate-800">{{ pick.time }} con {{ pick.resourceName }}</p>
+        <p v-if="service" class="text-slate-600">
+          {{ service.name }} · {{ service.duration_min }} min
+          <span v-if="service.occupied_min !== service.duration_min" class="text-slate-400">
+            (ocupa {{ service.occupied_min }})
+          </span>
         </p>
       </div>
 
@@ -107,6 +133,20 @@ async function submit(): Promise<void> {
       </div>
 
       <template v-else>
+        <p v-if="!available.length" class="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {{ pick.resourceName }} no tiene servicios asignados todavía.
+        </p>
+
+        <NxSelect
+          v-else
+          v-model="serviceId"
+          :options="available"
+          option-label="name"
+          option-value="id"
+          label="Servicio"
+          :disabled="isPending"
+        />
+
         <div class="relative">
           <NxInput v-model="term" label="Cliente" :disabled="isPending" autocomplete="off" />
 
