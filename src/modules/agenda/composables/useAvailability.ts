@@ -90,12 +90,27 @@ export interface ChainLeg {
   resource_name: string
   starts_at: string
   label: string
+  /**
+   * Por qué este tramo NO quedó con la persona esperada.
+   *
+   * `skill` = no presta ese servicio. `busy` = sí lo presta, pero a esa hora
+   * está ocupada. Son dos respuestas distintas del cliente: la primera se
+   * acepta, la segunda invita a mirar otra hora.
+   */
+  changed_reason: 'skill' | 'busy' | null
 }
 
 export interface ChainSlot {
   starts_at: string
   ends_at: string
   label: string
+  /** Toda la visita con la misma persona. */
+  same_person: boolean
+  /**
+   * Se pidió una persona y se le pudieron dar todos los servicios.
+   * `null` cuando no se pidió a nadie: ahí lo que importa es `same_person`.
+   */
+  preferred_honored: boolean | null
   legs: ChainLeg[]
 }
 
@@ -125,24 +140,37 @@ export interface ChainResponse {
     total: number
     savings_percent: number
   }) | null
+  preferred_resource: { id: number; name: string } | null
   slots: ChainSlot[]
 }
 
+/**
+ * `preferredId` es preferencia, no filtro.
+ *
+ * Pedir "todo con Aleja" y que desaparezcan las horas en que Aleja no presta
+ * uno de los servicios sería peor que ofrecerlas diciendo quién toma ese
+ * tramo. El backend devuelve la hora igual, con `changed_reason`.
+ */
 export function useChainAvailability(
   serviceIds: Ref<number[]>,
   packageId: Ref<number | null>,
   date: Ref<string>,
+  preferredId?: Ref<number | null>,
 ) {
   return useQuery({
-    queryKey: ['availability', 'chain', serviceIds, packageId, date],
+    queryKey: ['availability', 'chain', serviceIds, packageId, date, preferredId ?? null],
     enabled: computed(() =>
       Boolean(date.value) && (packageId.value !== null || serviceIds.value.length > 0),
     ),
     queryFn: async () => {
       const { data } = await httpClient.get<ChainResponse>('/availability/chain', {
-        params: packageId.value
-          ? { package_id: packageId.value, date: date.value }
-          : { 'service_ids[]': serviceIds.value, date: date.value },
+        params: {
+          ...(packageId.value
+            ? { package_id: packageId.value }
+            : { 'service_ids[]': serviceIds.value }),
+          date: date.value,
+          ...(preferredId?.value ? { resource_id: preferredId.value } : {}),
+        },
       })
       return data
     },

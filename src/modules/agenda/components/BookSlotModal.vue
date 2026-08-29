@@ -9,6 +9,8 @@ import {
   useAvailability,
   useChainAvailability,
   usePackages,
+  useResources,
+  type ChainLeg,
   type ChainSlot,
   type Service,
 } from '../composables/useAvailability'
@@ -50,6 +52,14 @@ const chainIds = ref<number[]>([])
 const packageId = ref<number | null>(null)
 const date = ref('')
 
+/**
+ * "Quiero todo con Aleja".
+ *
+ * Preferencia, no filtro: las horas en que Aleja no puede con algún servicio
+ * se siguen ofreciendo, diciendo quién toma ese tramo.
+ */
+const preferredId = ref<number | null>(null)
+
 /** Del calendario, o el elegido en la lista de horas. */
 const chosenResourceId = ref<number | null>(null)
 const chosenTime = ref<string | null>(null)
@@ -65,7 +75,12 @@ const conflict = ref(false)
 
 const { mutateAsync, isPending } = useBookAppointment()
 const { data: availability, isFetching: loadingSlots } = useAvailability(serviceId, date)
-const { data: chain, isFetching: loadingChain } = useChainAvailability(chainIds, packageId, date)
+const { data: chain, isFetching: loadingChain } = useChainAvailability(
+  chainIds,
+  packageId,
+  date,
+  preferredId,
+)
 const { data: packagesData } = usePackages()
 
 const service = computed(() => props.services.find((s) => s.id === serviceId.value) ?? null)
@@ -86,6 +101,26 @@ const available = computed(() =>
 
 const slots = computed(() => availability.value?.slots ?? [])
 const chainSlots = computed(() => chain.value?.slots ?? [])
+
+const { data: resourcesData } = useResources()
+const staff = computed(() => (resourcesData.value ?? []).filter((r) => r.type === 'staff'))
+
+/** Por qué este tramo quedó con otra persona, dicho como se diría en el mostrador. */
+function legNote(leg: ChainLeg): string | null {
+  if (leg.changed_reason === null) {
+    return null
+  }
+
+  const quien = chain.value?.preferred_resource?.name
+
+  if (leg.changed_reason === 'skill') {
+    return quien
+      ? `${quien} no presta ${leg.service_name.toLowerCase()}`
+      : `Lo toma otra persona: no todas prestan ${leg.service_name.toLowerCase()}`
+  }
+
+  return quien ? `${quien} no está libre a esa hora` : 'Lo toma otra persona por disponibilidad'
+}
 
 function money(value: number): string {
   return new Intl.NumberFormat('es-CO', {
@@ -118,6 +153,8 @@ watch(open, (isOpen) => {
   chainIds.value = []
   packageId.value = null
   date.value = props.pick?.date ?? ''
+  // Si vino de tocar la columna de alguien, esa es la persona que se quiere.
+  preferredId.value = props.pick?.resourceId ?? null
   chosenResourceId.value = props.pick?.resourceId ?? null
   chosenTime.value = props.pick?.time ?? null
   chosenChain.value = null
@@ -133,7 +170,7 @@ watch(open, (isOpen) => {
 
 // Cambiar lo que se va a hacer, o el día, invalida la hora elegida: ese hueco
 // era de otra combinación y puede no existir para la nueva.
-watch([serviceId, date, chainIds, packageId, mode], () => {
+watch([serviceId, date, chainIds, packageId, mode, preferredId], () => {
   if (picking.value) {
     chosenTime.value = null
     chosenResourceId.value = null
@@ -268,6 +305,15 @@ async function submit(): Promise<void> {
         </p>
         <p v-for="leg in chosenChain?.legs ?? []" :key="leg.service_id" class="text-slate-600">
           {{ leg.label }} · {{ leg.service_name }} con {{ leg.resource_name }}
+          <!-- El motivo del cambio se dice acá, no se deja adivinar: "no lo
+               presta" y "no está libre" llevan a decisiones distintas. -->
+          <span v-if="legNote(leg)" class="text-xs text-amber-700">— {{ legNote(leg) }}</span>
+        </p>
+        <p
+          v-if="chosenChain && chosenChain.legs.length > 1 && chosenChain.same_person"
+          class="text-xs text-emerald-700"
+        >
+          Toda la visita con {{ chosenChain.legs[0].resource_name }}.
         </p>
       </div>
 
@@ -360,6 +406,48 @@ async function submit(): Promise<void> {
           </div>
         </div>
 
+        <!-- Con quién.
+             Sólo en visitas de varios servicios: con uno solo, la persona sale
+             en cada hora de la lista y elegirla dos veces sobra. -->
+        <div v-if="picking && isChain && staff.length > 1">
+          <p class="mb-1.5 text-sm text-slate-600">
+            Con quién
+            <span class="text-xs text-slate-400">· se respeta en lo que pueda hacer</span>
+          </p>
+
+          <div class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="rounded-md border px-2.5 py-1.5 text-sm transition"
+              :class="
+                preferredId === null
+                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                  : 'border-slate-200 text-slate-700 hover:border-slate-400'
+              "
+              :disabled="isPending"
+              @click="preferredId = null"
+            >
+              Cualquiera
+            </button>
+
+            <button
+              v-for="person in staff"
+              :key="person.id"
+              type="button"
+              class="rounded-md border px-2.5 py-1.5 text-sm transition"
+              :class="
+                preferredId === person.id
+                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                  : 'border-slate-200 text-slate-700 hover:border-slate-400'
+              "
+              :disabled="isPending"
+              @click="preferredId = person.id"
+            >
+              {{ person.name }}
+            </button>
+          </div>
+        </div>
+
         <!-- Día y hora -->
         <template v-if="picking">
           <NxDatePicker v-model="date" label="Día" :disabled="isPending" />
@@ -405,6 +493,19 @@ async function submit(): Promise<void> {
                   @click="pickChain(slot)"
                 >
                   {{ slot.label }}
+                  <!-- La hora en que todo queda con la misma persona no se ve
+                       igual que una en que hay que cambiar de silla. Se marca
+                       antes de elegirla, no después. -->
+                  <span
+                    v-if="preferredId ? slot.preferred_honored : slot.same_person"
+                    class="ml-1 text-xs text-emerald-600"
+                    title="Toda la visita con la misma persona"
+                  >
+                    ✓
+                  </span>
+                  <span v-else class="ml-1 text-xs text-amber-600" title="Se reparte entre dos">
+                    ⇄
+                  </span>
                 </button>
               </div>
             </template>

@@ -5,15 +5,24 @@ import { extractErrorMessage } from '@/utils/extractErrorMessage'
 
 import {
   useCreatePublicBooking,
+  usePublicChain,
   usePublicDays,
   usePublicSlots,
   type BookingResult,
+  type PublicChainLeg,
+  type PublicChainSlot,
+  type PublicPackage,
   type PublicPage,
   type PublicResource,
   type PublicService,
 } from '../composables/usePublicBooking'
 
-const props = defineProps<{ slug: string; page: PublicPage; preselected: number | null }>()
+const props = defineProps<{
+  slug: string
+  page: PublicPage
+  preselected: number | null
+  preselectedPackage: number | null
+}>()
 
 const slug = computed(() => props.slug)
 
@@ -25,10 +34,14 @@ const slug = computed(() => props.slug)
 const step = ref<1 | 2 | 3 | 4>(1)
 
 const serviceId = ref<number | null>(null)
+/** Un combo elegido en el paso 1. Excluyente con `serviceId`. */
+const packageId = ref<number | null>(null)
 const resourceId = ref<number | null>(null)
 const date = ref<string | null>(null)
 const startsAt = ref<string | null>(null)
 const chosenResourceId = ref<number | null>(null)
+/** La cadena elegida: cada servicio con su persona y su hora. */
+const chosenChain = ref<PublicChainSlot | null>(null)
 
 const name = ref('')
 const phone = ref('')
@@ -39,23 +52,82 @@ const done = ref<BookingResult | null>(null)
 const today = new Date().toISOString().slice(0, 10)
 const from = ref(today)
 
-const { data: daysData, isFetching: loadingDays } = usePublicDays(slug, serviceId, from, resourceId)
+/*
+ * Para un combo, los días se consultan con su PRIMER servicio.
+ *
+ * Es un filtro necesario pero no suficiente: un día sin hueco para el primero
+ * tampoco lo tiene para la cadena, así que se puede apagar sin equivocarse.
+ * Al revés no vale, y por eso el día que queda encendido lo confirma la
+ * cadena. Calcular la cadena completa de catorce días para pintar la tira
+ * sería caro y nadie lo miraría.
+ */
+const packages = computed<PublicPackage[]>(() => props.page.packages ?? [])
+
+const pack = computed<PublicPackage | null>(
+  () => packages.value.find((p) => p.id === packageId.value) ?? null,
+)
+
+const daysServiceId = computed(() => serviceId.value ?? pack.value?.services[0]?.id ?? null)
+
+const { data: daysData, isFetching: loadingDays } = usePublicDays(slug, daysServiceId, from, resourceId)
 const { data: slotsData, isFetching: loadingSlots } = usePublicSlots(slug, serviceId, date, resourceId)
+const { data: chainData, isFetching: loadingChain } = usePublicChain(slug, packageId, date, resourceId)
 const { mutateAsync: book, isPending: booking } = useCreatePublicBooking(slug)
 
 const service = computed<PublicService | null>(
   () => props.page.services.find((s) => s.id === serviceId.value) ?? null,
 )
 
-/** Sólo quien presta ESTE servicio: ofrecer al resto lleva a un hueco vacío. */
-const resources = computed<PublicResource[]>(() =>
-  props.page.resources.filter((r) => service.value?.resource_ids.includes(r.id) ?? false),
-)
+/** Qué se está reservando, dicho en una línea. */
+const whatLabel = computed(() => pack.value?.name ?? service.value?.name ?? null)
+
+/**
+ * Quién se puede pedir.
+ *
+ * Para un servicio suelto, sólo quien lo presta: ofrecer al resto lleva a un
+ * hueco vacío. Para un combo, quien preste AL MENOS UNO -- pedirla es una
+ * preferencia, y el servidor dice qué parte tuvo que tomar otra persona en
+ * vez de esconder la hora entera.
+ */
+const resources = computed<PublicResource[]>(() => {
+  if (pack.value) {
+    const ids = pack.value.services.map((s) => s.id)
+
+    return props.page.resources.filter((r) =>
+      props.page.services.some((s) => ids.includes(s.id) && s.resource_ids.includes(r.id)),
+    )
+  }
+
+  return props.page.resources.filter((r) => service.value?.resource_ids.includes(r.id) ?? false)
+})
+
+/** Por qué esa parte quedó con otra persona, dicho como en el mostrador. */
+function legNote(leg: PublicChainLeg): string | null {
+  if (leg.changed_reason === null) {
+    return null
+  }
+
+  const quien = resources.value.find((r) => r.id === resourceId.value)?.name
+
+  if (leg.changed_reason === 'skill') {
+    return quien ? `${quien} no hace este servicio` : 'Lo toma otra persona'
+  }
+
+  return quien ? `${quien} no está libre a esa hora` : 'Lo toma otra persona por disponibilidad'
+}
 
 watch(
   () => props.preselected,
   (id) => {
     if (id !== null) pickService(id)
+  },
+  { immediate: true },
+)
+
+watch(
+  () => props.preselectedPackage,
+  (id) => {
+    if (id !== null) pickPackage(id)
   },
   { immediate: true },
 )
@@ -70,9 +142,21 @@ function money(value: number): string {
 
 function pickService(id: number): void {
   serviceId.value = id
+  packageId.value = null
   resourceId.value = null
   date.value = null
   startsAt.value = null
+  chosenChain.value = null
+  step.value = 2
+}
+
+function pickPackage(id: number): void {
+  packageId.value = id
+  serviceId.value = null
+  resourceId.value = null
+  date.value = null
+  startsAt.value = null
+  chosenChain.value = null
   step.value = 2
 }
 
@@ -80,6 +164,7 @@ function pickResource(id: number | null): void {
   resourceId.value = id
   date.value = null
   startsAt.value = null
+  chosenChain.value = null
   step.value = 3
 }
 
@@ -87,6 +172,12 @@ function pickSlot(slot: { starts_at: string; resource_id: number }): void {
   startsAt.value = slot.starts_at
   // Con "cualquiera", el hueco elegido decide quién atiende.
   chosenResourceId.value = slot.resource_id
+  step.value = 4
+}
+
+function pickChain(slot: PublicChainSlot): void {
+  chosenChain.value = slot
+  startsAt.value = slot.starts_at
   step.value = 4
 }
 
@@ -108,14 +199,30 @@ const canSubmit = computed(
 )
 
 async function submit(): Promise<void> {
-  if (!serviceId.value || !startsAt.value) return
+  if (!startsAt.value) return
+  if (!serviceId.value && !chosenChain.value) return
   error.value = null
+
+  const cita = chosenChain.value
+    ? {
+        // Se manda la cadena tal como la calculó el servidor, con la persona
+        // y la hora de cada parte. El servidor la revalida entera igual.
+        service_package_id: packageId.value,
+        items: chosenChain.value.legs.map((leg) => ({
+          service_id: leg.service_id,
+          resource_id: leg.resource_id,
+          starts_at: leg.starts_at,
+        })),
+      }
+    : {
+        service_id: serviceId.value!,
+        resource_id: chosenResourceId.value ?? resourceId.value!,
+        starts_at: startsAt.value,
+      }
 
   try {
     done.value = await book({
-      service_id: serviceId.value,
-      resource_id: chosenResourceId.value ?? resourceId.value!,
-      starts_at: startsAt.value,
+      ...cita,
       client_name: name.value.trim(),
       client_phone: phone.value.trim(),
       notes: notes.value.trim() || null,
@@ -126,6 +233,7 @@ async function submit(): Promise<void> {
     // único que sirve, y decirlo ahí es mejor que dejarla releyendo el error.
     if ((e as { response?: { status?: number } })?.response?.status === 409) {
       startsAt.value = null
+      chosenChain.value = null
       step.value = 3
     }
   }
@@ -135,9 +243,11 @@ function restart(): void {
   done.value = null
   step.value = 1
   serviceId.value = null
+  packageId.value = null
   resourceId.value = null
   date.value = null
   startsAt.value = null
+  chosenChain.value = null
   name.value = ''
   phone.value = ''
   notes.value = ''
@@ -149,10 +259,21 @@ function restart(): void {
   <div v-if="done" class="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center">
     <p class="text-3xl">✓</p>
     <h3 class="mt-2 text-lg font-semibold text-emerald-900">{{ done.message }}</h3>
-    <p class="mt-3 text-emerald-900">
+    <p v-if="done.items.length < 2" class="mt-3 text-emerald-900">
       <b>{{ done.service }}</b> con {{ done.resource }}<br />
       {{ done.date_label }} a las {{ done.time_label }}
     </p>
+
+    <!-- Visita de varios servicios: se detalla parte por parte. Enterarse al
+         llegar de que la segunda mitad la atiende otra persona es lo que hay
+         que evitar. -->
+    <div v-else class="mt-3 text-emerald-900">
+      <p v-if="done.package" class="font-semibold">{{ done.package }}</p>
+      <p>{{ done.date_label }}</p>
+      <p v-for="(item, i) in done.items" :key="i" class="mt-1 text-sm">
+        {{ item.time_label }} · {{ item.service }} con {{ item.resource }}
+      </p>
+    </div>
     <p class="mt-3 text-sm text-emerald-800">
       Si necesitas cambiarla o cancelarla, escríbenos.
       <!-- Cancelar no se puede desde acá a propósito: una URL pública que
@@ -168,11 +289,50 @@ function restart(): void {
     <div class="mb-4 flex items-center gap-2 text-xs text-slate-500">
       <button v-if="step > 1" type="button" class="underline" @click="back">Atrás</button>
       <span>Paso {{ step }} de 4</span>
-      <span v-if="service" class="truncate">· {{ service.name }}</span>
+      <span v-if="whatLabel" class="truncate">· {{ whatLabel }}</span>
     </div>
 
-    <!-- 1. Servicio -->
+    <!-- 1. Qué se va a hacer -->
     <div v-if="step === 1" class="grid gap-3 sm:grid-cols-2">
+      <!-- Los combos van primero y marcados: es lo que el negocio quiere
+           vender, y lo que le sale más barato a quien reserva. -->
+      <template v-if="packages.length">
+        <p class="text-sm font-medium text-slate-700 sm:col-span-2">Combos</p>
+
+        <button
+          v-for="combo in packages"
+          :key="`p${combo.id}`"
+          type="button"
+          class="flex gap-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-left transition hover:border-emerald-400"
+          @click="pickPackage(combo.id)"
+        >
+          <img
+            v-if="combo.image_url"
+            :src="combo.image_url"
+            :alt="combo.name"
+            class="h-16 w-16 shrink-0 rounded object-cover"
+          />
+          <span class="min-w-0 flex-1">
+            <span class="block font-medium text-slate-800">{{ combo.name }}</span>
+            <span class="mt-0.5 block truncate text-xs text-slate-500">
+              {{ combo.services.map((s) => s.name).join(' + ') }}
+            </span>
+            <span class="mt-1 block text-sm text-slate-600">
+              <b>{{ money(combo.total) }}</b>
+              <span v-if="combo.discount > 0" class="ml-1 text-slate-400 line-through">
+                {{ money(combo.list_total) }}
+              </span>
+              · {{ combo.total_minutes }} min
+            </span>
+            <span v-if="combo.discount > 0" class="mt-0.5 block text-xs font-medium text-emerald-700">
+              Ahorras {{ money(combo.discount) }}
+            </span>
+          </span>
+        </button>
+
+        <p class="mt-2 text-sm font-medium text-slate-700 sm:col-span-2">Servicios</p>
+      </template>
+
       <button
         v-for="item in page.services"
         :key="item.id"
@@ -197,7 +357,7 @@ function restart(): void {
         </span>
       </button>
 
-      <p v-if="!page.services.length" class="text-sm text-slate-500 sm:col-span-2">
+      <p v-if="!page.services.length && !packages.length" class="text-sm text-slate-500 sm:col-span-2">
         Este negocio todavía no ofrece reservas en línea. Escríbenos y te agendamos.
       </p>
     </div>
@@ -265,7 +425,37 @@ function restart(): void {
       <template v-if="date">
         <p class="mb-2 mt-5 text-sm font-medium text-slate-700">Elige la hora</p>
 
-        <p v-if="loadingSlots" class="text-sm text-slate-500">Cargando…</p>
+        <p v-if="loadingSlots || loadingChain" class="text-sm text-slate-500">Cargando…</p>
+
+        <!-- Combo: la hora es la de la visita completa, no la del primer
+             servicio. Cada botón sabe si todo queda con la misma persona. -->
+        <template v-else-if="pack">
+          <p v-if="!chainData?.slots.length" class="text-sm text-slate-500">
+            Ese día no cabe el combo completo. Prueba con otro.
+          </p>
+
+          <div v-else class="flex flex-wrap gap-2">
+            <button
+              v-for="(slot, i) in chainData.slots"
+              :key="i"
+              type="button"
+              class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition hover:border-slate-400"
+              @click="pickChain(slot)"
+            >
+              {{ slot.label }}
+              <span
+                v-if="slot.same_person"
+                class="ml-1 text-xs text-emerald-600"
+                title="Toda la visita con la misma persona"
+              >
+                ✓
+              </span>
+              <span v-else class="ml-1 text-xs text-amber-600" title="Se reparte entre dos personas">
+                ⇄
+              </span>
+            </button>
+          </div>
+        </template>
 
         <p v-else-if="!slotsData?.slots.length" class="text-sm text-slate-500">
           No quedan horas ese día. Prueba con otro.
@@ -294,16 +484,35 @@ function restart(): void {
     <!-- 4. Datos -->
     <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
       <div class="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-700">
-        <b>{{ service?.name }}</b>
-        <span v-if="service"> · {{ money(service.price) }} · {{ service.duration_min }} min</span>
-        <br />
-        {{ date ? dayLabel(date) : '' }}
-        <span v-if="startsAt">
-          a las
-          {{
-            new Date(startsAt).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })
-          }}
-        </span>
+        <template v-if="pack && chosenChain">
+          <b>{{ pack.name }}</b>
+          · {{ money(pack.total) }}
+          <span v-if="pack.discount > 0" class="text-emerald-700">
+            (ahorras {{ money(pack.discount) }})
+          </span>
+          <br />
+          {{ date ? dayLabel(date) : '' }}
+          <!-- Con quién queda cada parte, y por qué, antes de confirmar. Un
+               cambio de persona que se descubre en el local es una discusión
+               en el mostrador. -->
+          <span v-for="leg in chosenChain.legs" :key="leg.service_id" class="mt-1 block text-xs">
+            {{ leg.label }} · {{ leg.service_name }} con {{ leg.resource_name }}
+            <span v-if="legNote(leg)" class="text-amber-700">— {{ legNote(leg) }}</span>
+          </span>
+        </template>
+
+        <template v-else>
+          <b>{{ service?.name }}</b>
+          <span v-if="service"> · {{ money(service.price) }} · {{ service.duration_min }} min</span>
+          <br />
+          {{ date ? dayLabel(date) : '' }}
+          <span v-if="startsAt">
+            a las
+            {{
+              new Date(startsAt).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })
+            }}
+          </span>
+        </template>
       </div>
 
       <label class="text-sm text-slate-700">

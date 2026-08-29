@@ -12,11 +12,20 @@ const { data: page, isLoading, isError } = usePublicPage(slug)
 
 /** Servicio elegido desde la lista de arriba, para saltar directo al paso 2. */
 const preselected = ref<number | null>(null)
+/** Lo mismo para un combo. */
+const preselectedPackage = ref<number | null>(null)
 
 const bookingRef = ref<HTMLElement | null>(null)
 
 function bookService(id: number | null): void {
+  preselectedPackage.value = null
   preselected.value = id
+  bookingRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function bookPackage(id: number): void {
+  preselected.value = null
+  preselectedPackage.value = id
   bookingRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
@@ -134,6 +143,44 @@ const groupedHours = computed(() => {
       </header>
 
       <main class="mx-auto max-w-3xl px-5 py-10">
+        <!-- Combos.
+             Van antes que los servicios sueltos: es lo que el negocio quiere
+             vender y lo que sale mejor de precio. -->
+        <section v-if="page.packages?.length" class="mb-10">
+          <h2 class="mb-3 text-lg font-semibold text-slate-900">Combos</h2>
+
+          <div class="divide-y divide-emerald-100 rounded-xl border border-emerald-200 bg-emerald-50/40">
+            <div v-for="combo in page.packages" :key="combo.id" class="flex items-center gap-4 p-4">
+              <img
+                v-if="combo.image_url"
+                :src="combo.image_url"
+                :alt="combo.name"
+                class="h-14 w-14 shrink-0 rounded-lg object-cover"
+              />
+              <div class="min-w-0 flex-1">
+                <p class="font-medium text-slate-800">{{ combo.name }}</p>
+                <p class="mt-0.5 text-sm text-slate-500">
+                  {{ combo.services.map((s) => s.name).join(' + ') }}
+                </p>
+                <p class="mt-1 text-sm text-slate-600">
+                  <b>{{ money(combo.total, page.business.currency) }}</b>
+                  <span v-if="combo.discount > 0" class="ml-1 text-slate-400 line-through">
+                    {{ money(combo.list_total, page.business.currency) }}
+                  </span>
+                  · {{ combo.total_minutes }} min
+                </p>
+              </div>
+              <button
+                type="button"
+                class="shrink-0 rounded-lg border border-emerald-400 bg-white px-3 py-1.5 text-sm text-emerald-800 transition hover:border-emerald-600"
+                @click="bookPackage(combo.id)"
+              >
+                Reservar
+              </button>
+            </div>
+          </div>
+        </section>
+
         <!-- Servicios -->
         <section v-if="page.services.length" class="mb-10">
           <h2 class="mb-3 text-lg font-semibold text-slate-900">Servicios</h2>
@@ -173,7 +220,12 @@ const groupedHours = computed(() => {
         <!-- Reservar -->
         <section ref="bookingRef" class="mb-10 scroll-mt-4">
           <h2 class="mb-3 text-lg font-semibold text-slate-900">Reservar tu cita</h2>
-          <BookingFlow :slug="slug" :page="page" :preselected="preselected" />
+          <BookingFlow
+            :slug="slug"
+            :page="page"
+            :preselected="preselected"
+            :preselected-package="preselectedPackage"
+          />
         </section>
 
         <!-- Horario y equipo -->
