@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import { useSystemAlert } from '@/composables/useSystemAlert'
+import { useAuthStore } from '@/stores/auth.store'
+import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxInput, NxSelect, NxSwitch } from '@/ui'
 
 import {
   useFeatureCatalog,
+  useImpersonate,
   usePlatformBusiness,
   useUpdateBusiness,
   PLAN_LABELS,
@@ -14,7 +17,29 @@ import {
 } from '../composables/usePlatform'
 
 const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
 const { notify } = useSystemAlert()
+
+const { mutateAsync: impersonate } = useImpersonate()
+/** Id de la persona cuyo botón está cargando. */
+const impersonating = ref<number | null>(null)
+
+async function enterAs(userId: number, name: string): Promise<void> {
+  impersonating.value = userId
+
+  try {
+    const data = await impersonate(userId)
+    auth.impersonate(data)
+    // A la agenda y no al panel: es donde el negocio vive, y es lo que la
+    // persona que reportó el problema estaba mirando.
+    await router.push({ name: 'agenda' })
+  } catch (e) {
+    notify(extractErrorMessage(e, `No pudimos entrar como ${name}.`), 'error')
+  } finally {
+    impersonating.value = null
+  }
+}
 
 const id = computed(() => Number(route.params.id))
 const { data: business, isLoading } = usePlatformBusiness(id)
@@ -22,6 +47,10 @@ const { data: catalog } = useFeatureCatalog()
 const { mutateAsync: update, isPending } = useUpdateBusiness()
 
 const PLANS = Object.entries(PLAN_LABELS).map(([value, label]) => ({ value, label }))
+
+function modulesIn(group: string) {
+  return (catalog.value?.catalog ?? []).filter((entry) => entry.group === group)
+}
 
 const name = ref('')
 const timezone = ref('')
@@ -124,11 +153,50 @@ async function save(): Promise<void> {
             />
           </div>
 
-          <h3 class="mb-2 mt-5 text-sm font-medium text-slate-700">Dueños</h3>
-          <p v-for="owner in business.owners" :key="owner.id" class="text-sm text-slate-600">
-            {{ owner.name }} · {{ owner.email }}
-            <span v-if="!owner.is_active" class="text-red-600">(inactivo)</span>
+          <h3 class="mb-1 mt-5 text-sm font-medium text-slate-700">Equipo</h3>
+          <p class="mb-2 text-xs text-slate-500">
+            «Entrar como» abre el panel del negocio con los permisos de esa persona, para ver
+            exactamente lo que ella ve. Queda registrado en la auditoría.
           </p>
+
+          <div class="divide-y divide-slate-100 rounded-md border border-slate-200">
+            <div
+              v-for="member in business.users"
+              :key="member.id"
+              class="flex items-center gap-3 px-3 py-2"
+            >
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-sm text-slate-800">
+                  {{ member.name }}
+                  <span v-if="!member.is_active" class="ml-1 text-xs text-red-600">inactivo</span>
+                </span>
+                <span class="block truncate text-xs text-slate-500">
+                  {{ member.email }}
+                  <span v-if="member.resource_name">· {{ member.resource_name }}</span>
+                </span>
+              </span>
+
+              <span
+                class="shrink-0 rounded px-2 py-0.5 text-xs"
+                :class="member.is_admin ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-600'"
+              >
+                {{ member.is_admin ? 'Admin' : (member.role ?? 'sin rol') }}
+              </span>
+
+              <!-- Sin botón para los inactivos: mostraría una pantalla que
+                   esa persona no puede ver, y llevaría a "arreglar" algo que
+                   no está roto. El backend también lo rechaza. -->
+              <NxButton
+                v-if="member.is_active"
+                variant="ghost"
+                size="sm"
+                :loading="impersonating === member.id"
+                @click="enterAs(member.id, member.name)"
+              >
+                Entrar como
+              </NxButton>
+            </div>
+          </div>
         </article>
 
         <article class="rounded-lg border border-slate-200 bg-white p-4">
@@ -153,15 +221,27 @@ async function save(): Promise<void> {
           Lo que el negocio ve hoy. El plan define los valores por defecto; acá se ajusta caso por caso.
         </p>
 
-        <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          <label
-            v-for="flag in catalog?.flags ?? []"
-            :key="flag"
-            class="flex items-center gap-2 rounded border border-slate-100 px-3 py-2 text-sm text-slate-700"
-          >
-            <NxSwitch v-model="flags[flag]" :disabled="isPending" />
-            <span class="font-mono text-xs">{{ flag }}</span>
-          </label>
+        <!-- Agrupados y con su nombre. Antes salían las llaves crudas
+             (`no_show_penalties`, `whatsapp_agent`) y quien configura un
+             negocio tenía que adivinar qué enciende: un interruptor que dice
+             `managerial_accounting` no se prende con confianza. -->
+        <div v-for="group in catalog?.groups ?? []" :key="group" class="mb-4 last:mb-0">
+          <p class="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">{{ group }}</p>
+
+          <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <label
+              v-for="entry in modulesIn(group)"
+              :key="entry.key"
+              class="flex items-start gap-2 rounded border border-slate-100 px-3 py-2"
+              :title="entry.help"
+            >
+              <NxSwitch v-model="flags[entry.key]" :disabled="isPending" />
+              <span class="min-w-0">
+                <span class="block text-sm text-slate-700">{{ entry.label }}</span>
+                <span class="block text-xs text-slate-500">{{ entry.help }}</span>
+              </span>
+            </label>
+          </div>
         </div>
       </article>
     </template>

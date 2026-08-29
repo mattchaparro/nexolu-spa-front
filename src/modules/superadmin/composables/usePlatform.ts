@@ -2,6 +2,7 @@ import type { Ref } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 
 import { httpClient } from '@/services/http/client'
+import type { AuthResponse } from '@/types/auth'
 
 export interface BusinessCounts {
   users: number
@@ -30,7 +31,15 @@ export interface BusinessDetail extends PlatformBusiness {
   feature_flags: Record<string, boolean>
   resolved_features: Record<string, boolean>
   scheduling_settings: Record<string, number>
-  owners: Array<{ id: number; name: string; email: string; is_active: boolean }>
+  users: Array<{
+    id: number
+    name: string
+    email: string
+    is_active: boolean
+    is_admin: boolean
+    role: string | null
+    resource_name: string | null
+  }>
 }
 
 export interface PlatformDashboard {
@@ -91,6 +100,9 @@ export function useFeatureCatalog() {
       (
         await httpClient.get<{
           flags: string[]
+          /** El mismo catálogo, con nombre y grupo para mostrar en pantalla. */
+          catalog: Array<{ key: string; label: string; group: string; help: string }>
+          groups: string[]
           plans: Record<string, Record<string, boolean>>
           verticals: string[]
         }>('/superadmin/feature-catalog')
@@ -208,5 +220,19 @@ export function useCreateWorkflow() {
     mutationFn: async (payload: { name: string; description?: string | null }) =>
       (await httpClient.post<Workflow>('/superadmin/workflows', payload)).data,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sa', 'workflows'] }),
+  })
+}
+
+/**
+ * "Entrar como" un usuario de un negocio.
+ *
+ * Devuelve un token nuevo a nombre de esa persona; el store lo adopta y guarda
+ * el de plataforma aparte. No hay endpoint para volver: salir es cerrar la
+ * sesión prestada.
+ */
+export function useImpersonate() {
+  return useMutation({
+    mutationFn: async (userId: number) =>
+      (await httpClient.post<AuthResponse>(`/superadmin/impersonate/${userId}`)).data,
   })
 }
