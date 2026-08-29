@@ -32,6 +32,7 @@ const email = ref('')
 const password = ref('')
 const phone = ref('')
 const role = ref('staff')
+const commission = ref('')
 const photo = ref<File | null>(null)
 const preview = ref<string | null>(null)
 const error = ref<string | null>(null)
@@ -56,6 +57,8 @@ watch(
     password.value = ''
     phone.value = ''
     role.value = 'staff'
+    // El formulario habla en porcentaje (50); la API guarda fracción (0.50).
+    commission.value = r?.commission_rate != null ? String(Math.round(r.commission_rate * 100)) : ''
     photo.value = null
     preview.value = r?.photo_url ?? null
     error.value = null
@@ -71,13 +74,19 @@ function onFile(event: Event): void {
 async function submit(): Promise<void> {
   error.value = null
 
+  // Vacío = sin porcentaje propio, que NO es lo mismo que 0. Se manda null
+  // explícito para poder quitárselo a alguien que ya lo tenía.
+  const commissionRate =
+    isPerson.value && commission.value.trim() !== '' ? Number(commission.value) / 100 : null
+
   const payload: Record<string, unknown> = isEditing.value
-    ? { name: name.value.trim(), color: color.value }
+    ? { name: name.value.trim(), color: color.value, commission_rate: commissionRate }
     : {
         type: type.value,
         name: name.value.trim(),
         last_name: lastName.value.trim() || null,
         color: color.value,
+        commission_rate: commissionRate,
         ...(isPerson.value && email.value.trim()
           ? {
               email: email.value.trim(),
@@ -122,6 +131,29 @@ async function submit(): Promise<void> {
       <div class="flex items-center gap-3">
         <label class="text-sm text-slate-600">Color en la agenda</label>
         <input v-model="color" type="color" class="h-8 w-14 rounded border border-slate-200" :disabled="isPending" />
+      </div>
+
+      <!-- Su porcentaje general. Es lo que evita tener que ponerle un acuerdo
+           servicio por servicio a quien va al 50% en todo -- y acordarse de
+           repetirlo cada vez que entra un servicio nuevo al catálogo, que es
+           justo cuando nadie se acuerda. -->
+      <div v-if="isPerson">
+        <NxInput
+          v-model="commission"
+          label="Comisión (%)"
+          inputmode="numeric"
+          placeholder="Sin porcentaje propio"
+          :disabled="isPending"
+        />
+        <p class="mt-1 text-xs text-slate-500">
+          <template v-if="commission.trim() !== ''">
+            Gana <b>{{ commission }}%</b> en todos los servicios, aunque cada uno tenga otro. Se
+            puede pactar algo distinto en un servicio puntual.
+          </template>
+          <template v-else>
+            Si lo dejas vacío, cada servicio decide con su propio porcentaje (o el de su categoría).
+          </template>
+        </p>
       </div>
 
       <div>

@@ -104,6 +104,12 @@ const router = createRouter({
       meta: { permission: 'nomina.gestionar', feature: 'payroll' },
     },
     {
+      path: '/ventas',
+      name: 'sales-report',
+      component: () => import('@/modules/reports/views/SalesReportView.vue'),
+      meta: { permission: 'reportes.ver', feature: 'reports' },
+    },
+    {
       path: '/resumen',
       name: 'daily-summary',
       component: () => import('@/modules/cash/views/DailySummaryView.vue'),

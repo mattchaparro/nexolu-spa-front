@@ -34,6 +34,8 @@ export interface TeamResource {
   user_id: number | null
   is_bookable_online: boolean
   is_active: boolean
+  /** Su porcentaje general. Nulo = cada servicio decide. */
+  commission_rate: number | null
 }
 
 export interface Schedule {

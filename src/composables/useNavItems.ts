@@ -24,6 +24,7 @@ const ITEMS: Array<NavItem & { permission?: string; onlyStaff?: boolean }> = [
   { label: 'Mi turno', icon: 'pi pi-wallet', routeName: 'cash-shift', permission: 'caja.turno', featureKey: 'cash_shift' },
 
   { label: 'Resumen', icon: 'pi pi-chart-line', routeName: 'daily-summary', permission: 'reportes.ver', featureKey: 'reports' },
+  { label: 'Ventas', icon: 'pi pi-chart-bar', routeName: 'sales-report', permission: 'reportes.ver', featureKey: 'reports' },
   { label: 'Cierre', icon: 'pi pi-lock', routeName: 'daily-closing', permission: 'caja.cierre', featureKey: 'cash_closing' },
   { label: 'Gastos', icon: 'pi pi-receipt', routeName: 'expenses', permission: 'gastos.gestionar', featureKey: 'expenses' },
   { label: 'Nómina', icon: 'pi pi-money-bill', routeName: 'payroll', permission: 'nomina.gestionar', featureKey: 'payroll' },
