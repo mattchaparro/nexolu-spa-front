@@ -4,6 +4,8 @@ import { computed, ref, watch } from 'vue'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 
+import { useLocations } from '@/modules/settings/composables/useLocations'
+
 import { useSaveResource, type TeamResource } from '../composables/useCatalog'
 
 const props = defineProps<{
@@ -31,6 +33,7 @@ const ROLES = [
 ]
 
 const type = ref('staff')
+const locationId = ref<number | null>(null)
 const name = ref('')
 const lastName = ref('')
 const color = ref('#4f46e5')
@@ -47,6 +50,12 @@ const isEditing = computed(() => props.resource !== null)
 /** Sólo las personas llevan cuenta para entrar. Una cabina se ocupa, no entra. */
 const isPerson = computed(() => type.value === 'staff')
 
+const { data: locationsData } = useLocations()
+
+const sedes = computed(() => (locationsData.value?.locations ?? []).filter((l) => l.is_active))
+/** Con un solo local no hay nada que elegir: el servidor lo pone en la principal. */
+const variasSedes = computed(() => sedes.value.length > 1)
+
 watch(
   () => props.open,
   (isOpen) => {
@@ -56,6 +65,11 @@ watch(
 
     const r = props.resource
     type.value = r?.type ?? 'staff'
+    // Al agregar cae en la principal; al editar, en la suya. Nunca en null
+    // para el negocio de varias sedes: un recurso sin sede desaparece del
+    // filtro de la agenda sin explicación.
+    locationId.value =
+      r?.location_id ?? sedes.value.find((l) => l.is_primary)?.id ?? sedes.value[0]?.id ?? null
     name.value = r?.name ?? ''
     lastName.value = ''
     color.value = r?.color ?? '#4f46e5'
@@ -86,9 +100,20 @@ async function submit(): Promise<void> {
     isPerson.value && commission.value.trim() !== '' ? Number(commission.value) / 100 : null
 
   const payload: Record<string, unknown> = isEditing.value
-    ? { name: name.value.trim(), color: color.value, commission_rate: commissionRate }
+    ? {
+        name: name.value.trim(),
+        color: color.value,
+        commission_rate: commissionRate,
+        // Sólo se manda si de verdad cambió: el servidor rechaza el traslado
+        // de quien tiene citas pendientes, y no tiene sentido arriesgar ese
+        // 422 en un cambio de nombre.
+        ...(variasSedes.value && locationId.value !== props.resource?.location_id
+          ? { location_id: locationId.value }
+          : {}),
+      }
     : {
         type: type.value,
+        ...(variasSedes.value && locationId.value ? { location_id: locationId.value } : {}),
         name: name.value.trim(),
         last_name: lastName.value.trim() || null,
         color: color.value,
@@ -141,6 +166,23 @@ async function submit(): Promise<void> {
         </p>
       </template>
 
+      <!-- En qué local trabaja. Sólo con más de una sede: con una sola, el
+           servidor la pone en la principal y preguntarlo sería ruido. -->
+      <div v-if="variasSedes">
+        <NxSelect
+          v-model="locationId"
+          :options="sedes"
+          option-label="name"
+          option-value="id"
+          label="Sede"
+          :disabled="isPending"
+        />
+        <p v-if="isEditing" class="mt-1 text-xs text-slate-500">
+          Para trasladarla no puede tener citas pendientes: si las tiene, reagéndalas primero para
+          que ningún cliente llegue al local equivocado.
+        </p>
+      </div>
+
       <div class="grid gap-3" :class="isEditing ? '' : 'sm:grid-cols-2'">
         <NxInput v-model="name" label="Nombre" required :disabled="isPending" />
         <NxInput v-if="!isEditing" v-model="lastName" label="Apellido" :disabled="isPending" />
@@ -148,7 +190,12 @@ async function submit(): Promise<void> {
 
       <div class="flex items-center gap-3">
         <label class="text-sm text-slate-600">Color en la agenda</label>
-        <input v-model="color" type="color" class="h-8 w-14 rounded border border-slate-200" :disabled="isPending" />
+        <input
+          v-model="color"
+          type="color"
+          class="h-8 w-14 rounded border border-slate-200"
+          :disabled="isPending"
+        />
       </div>
 
       <!-- Su porcentaje general. Es lo que evita tener que ponerle un acuerdo
@@ -177,7 +224,12 @@ async function submit(): Promise<void> {
       <div>
         <label class="mb-1 block text-sm text-slate-600">Foto</label>
         <div class="flex items-center gap-3">
-          <img v-if="preview" :src="preview" alt="" class="h-14 w-14 rounded-full object-cover ring-1 ring-slate-200" />
+          <img
+            v-if="preview"
+            :src="preview"
+            alt=""
+            class="h-14 w-14 rounded-full object-cover ring-1 ring-slate-200"
+          />
           <input
             type="file"
             accept="image/jpeg,image/png,image/webp"
@@ -222,7 +274,9 @@ async function submit(): Promise<void> {
       <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
 
       <div class="flex justify-end gap-2">
-        <NxButton variant="secondary" :disabled="isPending" @click="emit('close')">Cancelar</NxButton>
+        <NxButton variant="secondary" :disabled="isPending" @click="emit('close')"
+          >Cancelar</NxButton
+        >
         <NxButton
           :loading="isPending"
           :disabled="!name.trim() || (!isEditing && isPerson && cupoLleno)"

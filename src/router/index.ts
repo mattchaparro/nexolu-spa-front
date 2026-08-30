@@ -93,6 +93,16 @@ const router = createRouter({
       meta: { permission: 'negocio.configurar', feature: 'online_booking' },
     },
     {
+      // Sin `feature: multi_location`: un negocio de un solo local también
+      // entra acá, para ponerle dirección y enlace de Maps a su sede. La
+      // bandera y el tope del plan deciden si puede abrir la SEGUNDA, y eso
+      // se defiende en el servidor.
+      path: '/configuracion/sedes',
+      name: 'locations',
+      component: () => import('@/modules/settings/views/LocationsView.vue'),
+      meta: { permission: 'negocio.configurar' },
+    },
+    {
       path: '/configuracion/campanas',
       name: 'campaigns',
       component: () => import('@/modules/settings/views/CampaignsView.vue'),

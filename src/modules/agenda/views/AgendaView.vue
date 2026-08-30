@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import { useSystemAlert } from '@/composables/useSystemAlert'
+import { useLocations } from '@/modules/settings/composables/useLocations'
 import { useAuthStore } from '@/stores/auth.store'
 import { NxButton, NxDatePicker } from '@/ui'
 
@@ -44,7 +45,64 @@ function addDays(iso: string, days: number): string {
 const from = computed(() => (view.value === 'day' ? anchor.value : mondayOf(anchor.value)))
 const to = computed(() => (view.value === 'day' ? null : addDays(mondayOf(anchor.value), 6)))
 
-const { data: agenda, isFetching } = useAgenda(from, to)
+/*
+ * Qué sede se está mirando.
+ *
+ * Arranca en null -- todas -- y un watch la fija en la principal apenas se
+ * sabe que hay más de una. Con un solo local el selector ni aparece y la
+ * agenda se comporta igual que antes de que existieran las sedes.
+ *
+ * La elección se recuerda en el navegador porque quien administra dos
+ * locales entra siempre al mismo, y tener que elegirlo cada mañana es una
+ * fricción diaria por una decisión que casi nunca cambia.
+ */
+const RECUERDO_SEDE = 'nexolu.agenda.sede'
+
+const locationId = ref<number | null>(leerSedeRecordada())
+
+function leerSedeRecordada(): number | null {
+  try {
+    const guardada = window.localStorage.getItem(RECUERDO_SEDE)
+    return guardada ? Number(guardada) : null
+  } catch {
+    // Navegación privada, o cookies bloqueadas. No es un error: se cae al
+    // comportamiento de siempre.
+    return null
+  }
+}
+
+const { data: locationsData } = useLocations()
+
+const sedes = computed(() => (locationsData.value?.locations ?? []).filter((l) => l.is_active))
+const variasSedes = computed(() => sedes.value.length > 1)
+
+watch(
+  sedes,
+  (lista) => {
+    if (lista.length < 2) {
+      // Volvió a haber un solo local: la rejilla las trae todas otra vez.
+      locationId.value = null
+      return
+    }
+
+    // La sede recordada puede haberse apagado desde otro dispositivo.
+    if (locationId.value && lista.some((l) => l.id === locationId.value)) return
+
+    locationId.value = (lista.find((l) => l.is_primary) ?? lista[0]).id
+  },
+  { immediate: true },
+)
+
+watch(locationId, (id) => {
+  try {
+    if (id) window.localStorage.setItem(RECUERDO_SEDE, String(id))
+    else window.localStorage.removeItem(RECUERDO_SEDE)
+  } catch {
+    // Recordarlo es una comodidad, no un requisito.
+  }
+})
+
+const { data: agenda, isFetching } = useAgenda(from, to, locationId)
 const { data: services } = useServices()
 const { data: dayAppointments } = useAppointments(anchor)
 const { mutateAsync: reschedule } = useReschedule()
@@ -157,9 +215,7 @@ async function onMove(payload: {
     // 409 es que el destino ya estaba ocupado. La rejilla se recarga sola,
     // así que basta con decirlo: no hay nada que deshacer a mano.
     notify(
-      status === 409
-        ? 'Ese horario ya está ocupado.'
-        : 'No pudimos mover la cita.',
+      status === 409 ? 'Ese horario ya está ocupado.' : 'No pudimos mover la cita.',
       status === 409 ? 'warn' : 'error',
     )
   }
@@ -178,7 +234,6 @@ function onOpen(appointment: GridAppointment): void {
     toCheckout.value = full
   }
 }
-
 </script>
 
 <template>
@@ -199,9 +254,20 @@ function onOpen(appointment: GridAppointment): void {
           <i class="pi pi-plus mr-1.5 text-xs" />Agendar cita
         </NxButton>
 
+        <!-- Sólo con más de un local. Un selector de una sola opción es ruido
+             en la barra más usada del producto. -->
+        <select
+          v-if="variasSedes"
+          v-model.number="locationId"
+          class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
+          aria-label="Sede"
+        >
+          <option v-for="sede in sedes" :key="sede.id" :value="sede.id">{{ sede.name }}</option>
+        </select>
+
         <div class="flex overflow-hidden rounded-md border border-slate-200">
           <button
-            v-for="option in (['day', 'week'] as View[])"
+            v-for="option in ['day', 'week'] as View[]"
             :key="option"
             type="button"
             class="px-3 py-1.5 text-sm"
@@ -274,14 +340,23 @@ function onOpen(appointment: GridAppointment): void {
       :services="services ?? []"
       :default-service-id="services?.[0]?.id ?? null"
       @close="pick = null"
-      @booked="pick = null; notify('Cita agendada.', 'success')"
+      @booked="
+        pick = null
+        notify('Cita agendada.', 'success')
+      "
     />
 
     <CheckoutModal
       :appointment="toCheckout"
       @close="toCheckout = null"
-      @done="toCheckout = null; notify('Servicio cobrado. La comisión quedó registrada.', 'success')"
-      @cancelled="toCheckout = null; notify('Cita cancelada. El horario vuelve a estar libre.', 'success')"
+      @done="
+        toCheckout = null
+        notify('Servicio cobrado. La comisión quedó registrada.', 'success')
+      "
+      @cancelled="
+        toCheckout = null
+        notify('Cita cancelada. El horario vuelve a estar libre.', 'success')
+      "
     />
   </section>
 </template>

@@ -28,6 +28,8 @@ export interface AdminService {
 export interface TeamResource {
   id: number
   type: 'staff' | 'station' | 'room' | 'equipment'
+  /** En qué local trabaja. Nulo sólo en datos anteriores a las sedes. */
+  location_id: number | null
   name: string
   color: string | null
   photo_url: string | null

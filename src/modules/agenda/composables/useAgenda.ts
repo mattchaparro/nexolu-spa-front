@@ -54,13 +54,28 @@ export interface AgendaResponse {
   days: GridDay[]
 }
 
-export function useAgenda(from: Ref<string>, to: Ref<string | null>) {
+/**
+ * La rejilla de un rango de fechas, opcionalmente de una sola sede.
+ *
+ * Sin sede vienen todas, que es lo correcto para el negocio de un solo local.
+ * Con dos locales la pantalla manda sede siempre: dos jornadas distintas
+ * mezcladas en el mismo ancho no se pueden leer.
+ */
+export function useAgenda(
+  from: Ref<string>,
+  to: Ref<string | null>,
+  locationId?: Ref<number | null>,
+) {
   return useQuery({
-    queryKey: ['agenda', from, to],
+    queryKey: ['agenda', from, to, locationId ?? null],
     queryFn: async () =>
       (
         await httpClient.get<AgendaResponse>('/agenda', {
-          params: { from: from.value, ...(to.value ? { to: to.value } : {}) },
+          params: {
+            from: from.value,
+            ...(to.value ? { to: to.value } : {}),
+            ...(locationId?.value ? { location_id: locationId.value } : {}),
+          },
         })
       ).data,
   })
@@ -78,7 +93,8 @@ export function useReschedule() {
       id: number
       starts_at: string
       resource_id?: number
-    }) => (await httpClient.patch(`/appointments/${id}/reschedule`, { starts_at, resource_id })).data,
+    }) =>
+      (await httpClient.patch(`/appointments/${id}/reschedule`, { starts_at, resource_id })).data,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agenda'] })
       queryClient.invalidateQueries({ queryKey: ['availability'] })
