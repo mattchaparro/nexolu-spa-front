@@ -27,6 +27,13 @@ const router = createRouter({
       component: () => import('@/modules/publicBooking/views/PublicBookingView.vue'),
       meta: { public: true, layout: 'blank' },
     },
+    {
+      // La encuesta llega por WhatsApp: sin sesión y con el token en la URL.
+      path: '/encuesta/:token',
+      name: 'survey',
+      component: () => import('@/modules/publicBooking/views/SurveyView.vue'),
+      meta: { public: true, layout: 'blank' },
+    },
 
     {
       path: '/',
