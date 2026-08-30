@@ -16,6 +16,14 @@ export interface Business {
    * un negocio del plan Basico modulos que no habia contratado.
    */
   resolved_features: Record<string, boolean>
+  subscription_plan: 'basico' | 'pro' | 'full' | null
+  /**
+   * Topes del plan CON el uso de hoy (Business::planUsage()).
+   *
+   * `limit: null` = sin tope. Sirve para decir "2 de 3" ANTES de que alguien
+   * llene un formulario que va a ser rechazado al guardar.
+   */
+  plan_usage: Record<string, { limit: number | null; used: number; remaining: number | null }>
   scheduling_settings: {
     slot_granularity_min: number
     min_booking_notice_min: number

@@ -57,6 +57,14 @@ const timezone = ref('')
 const plan = ref<string | null>(null)
 const flags = ref<Record<string, boolean>>({})
 const settings = ref<Record<string, number>>({})
+/**
+ * Topes del plan. Vacío = sin tope para ese negocio.
+ *
+ * Se editan los RESUELTOS, igual que las banderas: es lo que el negocio tiene
+ * hoy. Guardar sólo lo explícito haría que bajar un tope heredado del plan no
+ * tuviera efecto visible.
+ */
+const limits = ref<Record<string, number | null>>({})
 
 watch(
   business,
@@ -73,6 +81,7 @@ watch(
     // apagar algo heredado del plan no tuviera ningún efecto visible.
     flags.value = { ...b.resolved_features }
     settings.value = { ...b.scheduling_settings }
+    limits.value = { ...(b.resolved_limits ?? {}) }
   },
   { immediate: true },
 )
@@ -92,6 +101,14 @@ async function save(): Promise<void> {
     timezone: timezone.value.trim(),
     subscription_plan: plan.value ?? undefined,
     feature_flags: flags.value,
+    // Un campo vacío es "sin tope", no cero: un tope de 0 dejaría al negocio
+    // sin poder agregar a nadie.
+    plan_limits: Object.fromEntries(
+      Object.entries(limits.value).map(([key, value]) => [
+        key,
+        value === null || String(value).trim() === '' ? null : Number(value),
+      ]),
+    ),
     scheduling_settings: Object.fromEntries(
       Object.entries(settings.value).map(([key, value]) => [key, Number(value)]),
     ),
@@ -242,6 +259,44 @@ async function save(): Promise<void> {
               </span>
             </label>
           </div>
+        </div>
+      </article>
+
+      <!-- El otro eje del plan: no qué ve, sino cuánto puede cargar. -->
+      <article class="mt-6 rounded-lg border border-slate-200 bg-white p-4">
+        <h2 class="mb-1 text-sm font-medium text-slate-700">Topes del plan</h2>
+        <p class="mb-3 text-xs text-slate-500">
+          Dejar vacío es sin tope. Se valida sólo al agregar: un negocio que ya quedó por encima
+          sigue trabajando con lo que tiene.
+        </p>
+
+        <div class="grid gap-3 sm:grid-cols-2">
+          <label
+            v-for="entry in catalog?.limits ?? []"
+            :key="entry.key"
+            class="rounded border border-slate-100 px-3 py-2"
+          >
+            <span class="block text-sm text-slate-700">{{ entry.label }}</span>
+            <span class="block text-xs text-slate-500">{{ entry.help }}</span>
+
+            <span class="mt-2 flex items-center gap-2">
+              <input
+                v-model="limits[entry.key]"
+                type="number"
+                min="1"
+                placeholder="Sin tope"
+                class="w-28 rounded border border-slate-200 px-2 py-1 text-sm"
+                :disabled="isPending"
+              />
+              <span class="text-xs text-slate-400">{{ entry.unit }}</span>
+              <!-- El uso de hoy al lado del tope: sin esto, soporte no puede
+                   responder "¿por qué no me deja agregar a nadie?" sin entrar
+                   a mirar la base. -->
+              <span v-if="business?.plan_usage?.[entry.key]" class="text-xs text-slate-500">
+                · usa {{ business.plan_usage[entry.key].used }} hoy
+              </span>
+            </span>
+          </label>
         </div>
       </article>
     </template>

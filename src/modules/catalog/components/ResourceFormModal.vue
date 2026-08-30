@@ -6,20 +6,26 @@ import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 
 import { useSaveResource, type TeamResource } from '../composables/useCatalog'
 
-const props = defineProps<{ resource: TeamResource | null; open: boolean }>()
+const props = defineProps<{
+  resource: TeamResource | null
+  open: boolean
+  /** El plan ya no da para más gente. Los espacios sí se pueden seguir agregando. */
+  cupoLleno?: boolean
+  limiteEquipo?: number | null
+}>()
 const emit = defineEmits<{ close: []; saved: [] }>()
 
 const { mutateAsync, isPending } = useSaveResource()
 
 const TYPES = [
-  { value: 'staff', label: 'Profesional' },
+  { value: 'staff', label: 'Persona del equipo' },
   { value: 'station', label: 'Puesto o silla' },
   { value: 'room', label: 'Cabina o sala' },
   { value: 'equipment', label: 'Equipo' },
 ]
 
 const ROLES = [
-  { value: 'staff', label: 'Profesional — ve y atiende lo suyo' },
+  { value: 'staff', label: 'Del equipo — ve y atiende lo suyo' },
   { value: 'reception', label: 'Recepción — agenda para todo el equipo y cobra' },
   { value: 'admin', label: 'Administrador — acceso completo' },
 ]
@@ -113,15 +119,27 @@ async function submit(): Promise<void> {
     @update:model-value="emit('close')"
   >
     <div class="flex flex-col gap-4">
-      <NxSelect
-        v-if="!isEditing"
-        v-model="type"
-        :options="TYPES"
-        option-label="label"
-        option-value="value"
-        label="Tipo"
-        :disabled="isPending"
-      />
+      <template v-if="!isEditing">
+        <NxSelect
+          v-model="type"
+          :options="TYPES"
+          option-label="label"
+          option-value="value"
+          label="Tipo"
+          :disabled="isPending"
+        />
+
+        <!-- El tope se avisa acá, donde se elige el tipo, y no en el botón de
+             la lista: una cabina o una silla no gastan cupo de plan. -->
+        <p
+          v-if="cupoLleno && isPerson"
+          class="-mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800"
+        >
+          Tu plan permite {{ limiteEquipo }} personas activas y ya las tienes. Desactiva a alguien
+          para liberar un cupo, o escríbenos para ampliar el plan. Los puestos y cabinas no gastan
+          cupo.
+        </p>
+      </template>
 
       <div class="grid gap-3" :class="isEditing ? '' : 'sm:grid-cols-2'">
         <NxInput v-model="name" label="Nombre" required :disabled="isPending" />
@@ -205,7 +223,13 @@ async function submit(): Promise<void> {
 
       <div class="flex justify-end gap-2">
         <NxButton variant="secondary" :disabled="isPending" @click="emit('close')">Cancelar</NxButton>
-        <NxButton :loading="isPending" :disabled="!name.trim()" @click="submit">Guardar</NxButton>
+        <NxButton
+          :loading="isPending"
+          :disabled="!name.trim() || (!isEditing && isPerson && cupoLleno)"
+          @click="submit"
+        >
+          Guardar
+        </NxButton>
       </div>
     </div>
   </NxModal>

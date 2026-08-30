@@ -22,8 +22,31 @@ const schedulingFor = ref<TeamResource | null>(null)
 const staff = computed(() => team.value?.filter((r) => r.type === 'staff') ?? [])
 const spaces = computed(() => team.value?.filter((r) => r.type !== 'staff') ?? [])
 
+/*
+|------------------------------------------------------------------------------
+| Cupo del plan
+|------------------------------------------------------------------------------
+| El TOPE viene del plan y casi nunca cambia; el USO cambia cada vez que se
+| agrega o se desactiva a alguien. Por eso el tope se lee de la sesión y el uso
+| se cuenta de la lista que ya está en pantalla, en vez de confiar en el número
+| que vino con el login: un contador cacheado que se desincroniza de la
+| realidad es exactamente el bug que el sistema viejo terminó parcheando con un
+| comando de reparación.
+*/
+
+const limiteEquipo = computed<number | null>(
+  () => auth.business?.plan_usage?.max_resources?.limit ?? null,
+)
+
+/** Sólo cuenta la gente ACTIVA: desactivar a alguien libera el cupo. */
+const equipoActivo = computed(() => staff.value.filter((r) => r.is_active).length)
+
+const cupoLleno = computed(
+  () => limiteEquipo.value !== null && equipoActivo.value >= limiteEquipo.value,
+)
+
 const TYPE_LABELS: Record<string, string> = {
-  staff: 'Profesional',
+  staff: 'Persona del equipo',
   station: 'Puesto',
   room: 'Cabina',
   equipment: 'Equipo',
@@ -62,7 +85,19 @@ async function toggleActive(resource: TeamResource): Promise<void> {
         <p class="mt-1 text-sm text-slate-500">
           Quién atiende y qué espacios se ocupan en {{ auth.business?.name }}.
         </p>
+        <!-- Sólo si hay tope. Con plan sin límite, un "3 de ∞" es ruido. -->
+        <p v-if="limiteEquipo !== null" class="mt-1 text-sm">
+          <span :class="cupoLleno ? 'font-medium text-amber-700' : 'text-slate-500'">
+            {{ equipoActivo }} de {{ limiteEquipo }} personas de tu plan
+          </span>
+          <span v-if="cupoLleno" class="text-slate-500">
+            · desactiva a alguien para liberar un cupo
+          </span>
+        </p>
       </div>
+      <!-- No se deshabilita aunque el cupo esté lleno: una cabina o una silla
+           no gastan cupo de plan, y bloquear el botón entero impediría
+           agregarlas. El tope se aplica sobre el TIPO, dentro del formulario. -->
       <NxButton v-if="auth.can('recursos.gestionar')" @click="create">Agregar</NxButton>
     </header>
 
@@ -99,7 +134,7 @@ async function toggleActive(resource: TeamResource): Promise<void> {
               <p class="font-medium text-slate-800">{{ person.name }}</p>
               <p class="text-xs text-slate-500">
                 {{ person.user_id ? 'Con acceso al sistema' : 'Sin cuenta' }}
-                <span v-if="!person.is_active"> · inactiva</span>
+                <span v-if="!person.is_active"> · fuera de la agenda</span>
               </p>
             </div>
           </div>
@@ -145,6 +180,8 @@ async function toggleActive(resource: TeamResource): Promise<void> {
     <ResourceFormModal
       :resource="editing"
       :open="formOpen"
+      :cupo-lleno="cupoLleno"
+      :limite-equipo="limiteEquipo"
       @close="formOpen = false"
       @saved="formOpen = false; notify('Guardado.', 'success')"
     />

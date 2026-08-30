@@ -30,6 +30,12 @@ export interface BusinessDetail extends PlatformBusiness {
   country_code: string
   feature_flags: Record<string, boolean>
   resolved_features: Record<string, boolean>
+  /** Excepciones concedidas a ESTE negocio. Vacío = manda el plan. */
+  plan_limits: Record<string, number | null>
+  /** El tope que rige hoy: preset del plan + excepciones. */
+  resolved_limits: Record<string, number | null>
+  /** Cuánto lleva usado contra cada tope. */
+  plan_usage: Record<string, { limit: number | null; used: number; remaining: number | null }>
   scheduling_settings: Record<string, number>
   users: Array<{
     id: number
@@ -105,6 +111,9 @@ export function useFeatureCatalog() {
           groups: string[]
           plans: Record<string, Record<string, boolean>>
           verticals: string[]
+          /** Topes disponibles, con su etiqueta y unidad. */
+          limits: Array<{ key: string; label: string; help: string; unit: string }>
+          plan_limits: Record<string, Record<string, number | null>>
         }>('/superadmin/feature-catalog')
       ).data,
   })
