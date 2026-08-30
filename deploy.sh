@@ -28,7 +28,7 @@ cd "$(dirname "$0")"
 
 SERVIDOR="${SPA_FRONT_SERVER:-root@134.122.116.201}"
 APP_DIR="${SPA_FRONT_APP_DIR:-/opt/nexolu/nexolu-spa-front}"
-URL="${SPA_FRONT_URL:-https://spa.nexolu.co}"
+URL="${SPA_FRONT_URL:-https://agenda.nexolu.co}"
 RETENER="${RETENER:-3}"
 
 log() { echo "[spa-front] $*"; }
