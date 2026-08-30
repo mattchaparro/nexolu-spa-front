@@ -129,6 +129,8 @@ export interface CheckoutPayload {
   payment_method_id: number
   discount_amount?: number
   discount_reason?: string
+  /** Premio de la tarjeta de sellos que se usa hoy. */
+  loyalty_reward_id?: number | null
 }
 
 export function useCheckout() {

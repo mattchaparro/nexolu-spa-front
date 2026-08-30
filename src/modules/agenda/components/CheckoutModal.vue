@@ -8,6 +8,8 @@ import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 
 import StagePicker from './StagePicker.vue'
 
+import { useClientLoyalty } from '@/modules/settings/composables/useLoyalty'
+
 import {
   useCancelAppointment,
   useCheckout,
@@ -109,6 +111,28 @@ async function marcarAbono(): Promise<void> {
   }
 }
 
+/*
+|------------------------------------------------------------------------------
+| Tarjeta de sellos
+|------------------------------------------------------------------------------
+| El premio se ofrece acá, en el cobro, porque es el único momento en que
+| alguien del local tiene delante a la clienta Y la cuenta. Dejarlo en la ficha
+| obligaría a acordarse de ir a mirarla antes de cobrar, y no se acuerda nadie.
+*/
+
+const clienteId = computed(() => props.appointment?.client_id ?? null)
+const { data: card } = useClientLoyalty(
+  clienteId,
+  computed(() => open.value && auth.hasFeature('loyalty')),
+)
+
+const premiosDisponibles = computed(() => card.value?.rewards ?? [])
+const premioElegido = ref<number | null>(null)
+
+const premio = computed(
+  () => premiosDisponibles.value.find((r) => r.id === premioElegido.value) ?? null,
+)
+
 /** Lo que cada persona se lleva, con el descuento ya repartido. */
 const commissions = computed(() => {
   const items = props.appointment?.items ?? []
@@ -131,6 +155,9 @@ watch(open, (isOpen) => {
     error.value = null
     // Se suelta la copia local: la cita que se abre ahora es otra.
     recienActualizada.value = null
+    // El premio NO se preselecciona: gastar la tarjeta de alguien sin que
+    // nadie lo haya elegido es peor que olvidar ofrecerlo.
+    premioElegido.value = null
   }
 })
 
@@ -165,6 +192,7 @@ async function submit(): Promise<void> {
       payment_method_id: paymentMethodId.value,
       discount_amount: discountValue.value || undefined,
       discount_reason: discountReason.value.trim() || undefined,
+      loyalty_reward_id: premioElegido.value,
     })
     emit('done')
   } catch (e) {
@@ -221,9 +249,59 @@ async function submit(): Promise<void> {
         </div>
       </div>
 
+      <!-- La tarjeta de sellos. Se muestra siempre que haya programa: ver que
+           le faltan 2 sellos es lo que hace que quien cobra se lo diga, y eso
+           es la mitad del valor del programa. -->
+      <div
+        v-if="card?.program"
+        class="rounded-md border px-4 py-3 text-sm"
+        :class="premiosDisponibles.length ? 'border-amber-300 bg-amber-50' : 'border-slate-200'"
+      >
+        <p v-if="!premiosDisponibles.length" class="text-slate-600">
+          {{ card.program.name }}: {{ card.stamps }} de {{ card.required }} sellos ·
+          <span class="text-slate-500">
+            le faltan {{ card.remaining }} para {{ card.program.reward_label }}
+          </span>
+        </p>
+
+        <template v-else>
+          <p class="font-medium text-amber-900">
+            Tiene {{ premiosDisponibles.length === 1 ? 'un premio' : `${premiosDisponibles.length} premios` }}
+            sin usar
+          </p>
+          <div class="mt-2 flex flex-wrap gap-2">
+            <button
+              v-for="r in premiosDisponibles"
+              :key="r.id"
+              type="button"
+              class="rounded-md border px-2.5 py-1.5 text-sm transition"
+              :class="
+                premioElegido === r.id
+                  ? 'border-amber-600 bg-amber-600 font-medium text-white'
+                  : 'border-amber-300 bg-white text-amber-900'
+              "
+              :disabled="isPending"
+              @click="premioElegido = premioElegido === r.id ? null : r.id"
+            >
+              {{ r.label }}
+            </button>
+          </div>
+          <p class="mt-1 text-xs text-amber-800">
+            Tócalo para aplicarlo a este cobro. Si no, queda guardado para la próxima.
+          </p>
+        </template>
+      </div>
+
       <div class="rounded-md border border-slate-200 px-4 py-3 text-sm">
         <p class="flex justify-between text-slate-600">
           <span>Subtotal</span><span class="tabular-nums">{{ money(subtotal) }}</span>
+        </p>
+        <!-- El premio no se resta acá: el servidor lo calcula y lo suma al
+             descuento. Duplicar esa aritmética en el front es garantizar que
+             un día las dos copias digan cosas distintas. -->
+        <p v-if="premio" class="flex justify-between text-amber-700">
+          <span>Premio · {{ premio.label }}</span>
+          <span class="tabular-nums">se aplica al cobrar</span>
         </p>
         <p v-if="discountValue > 0" class="flex justify-between text-amber-700">
           <span>Descuento</span><span class="tabular-nums">−{{ money(discountValue) }}</span>

@@ -31,6 +31,7 @@ const ITEMS: Array<NavItem & { permission?: string; onlyStaff?: boolean }> = [
   { label: 'Servicios', icon: 'pi pi-sparkles', routeName: 'services', permission: 'servicios.gestionar' },
   { label: 'Equipo', icon: 'pi pi-id-card', routeName: 'resources', permission: 'recursos.gestionar' },
   { label: 'Mi página', icon: 'pi pi-globe', routeName: 'public-page', permission: 'negocio.configurar', featureKey: 'online_booking' },
+  { label: 'Fidelización', icon: 'pi pi-star', routeName: 'loyalty', permission: 'servicios.gestionar', featureKey: 'loyalty' },
   { label: 'Medios de pago', icon: 'pi pi-credit-card', routeName: 'payment-methods', permission: 'negocio.configurar' },
   { label: 'Permisos', icon: 'pi pi-shield', routeName: 'permissions', permission: 'permisos.gestionar', featureKey: 'permissions_management' },
   { label: 'Pagos al equipo', icon: 'pi pi-percentage', routeName: 'compensation', permission: 'nomina.gestionar', featureKey: 'payroll' },
