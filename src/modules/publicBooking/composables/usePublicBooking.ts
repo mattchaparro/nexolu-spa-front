@@ -133,9 +133,10 @@ export function usePublicDays(
   serviceId: Ref<number | null>,
   from: Ref<string>,
   resourceId: Ref<number | null>,
+  days?: Ref<number>,
 ) {
   return useQuery({
-    queryKey: ['public', slug, 'days', serviceId, from, resourceId],
+    queryKey: ['public', slug, 'days', serviceId, from, resourceId, days ?? 14],
     enabled: () => serviceId.value !== null,
     queryFn: async () =>
       (
@@ -145,6 +146,7 @@ export function usePublicDays(
             params: {
               service_id: serviceId.value,
               from: from.value,
+              ...(days ? { days: days.value } : {}),
               ...(resourceId.value ? { resource_id: resourceId.value } : {}),
             },
           },
@@ -225,6 +227,7 @@ export function useCreatePublicBooking(slug: Ref<string>) {
       service_package_id?: number | null
       client_name: string
       client_phone: string
+      client_email: string
       notes?: string | null
     }) => (await httpClient.post<BookingResult>(`/public/${slug.value}/appointments`, payload)).data,
   })

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 
+import MonthCalendar from './MonthCalendar.vue'
 import {
   useCreatePublicBooking,
   usePublicChain,
@@ -27,11 +28,24 @@ const props = defineProps<{
 const slug = computed(() => props.slug)
 
 /*
- * Cuatro pasos, uno por pantalla. Un formulario único con todo a la vez cabe
- * en un monitor pero no en un teléfono, y por el teléfono es por donde reserva
- * la gente.
- */
+|------------------------------------------------------------------------------
+| Reservar desde el navegador de WhatsApp
+|------------------------------------------------------------------------------
+| La mayoría de estas reservas entran por un enlace pegado en un chat, y ese
+| navegador embebido es el peor caso: pantalla corta, barra del sistema que
+| tapa el borde de abajo, y nada de teclado físico. De ahí salen decisiones que
+| en un escritorio parecerían exageradas:
+|
+|   - Un paso por pantalla, con lo elegido siempre a la vista arriba.
+|   - Todo lo tocable mide 44px de alto. El pulgar no acierta menos.
+|   - Los campos van en 16px: por debajo de eso, iOS hace zoom al enfocar y
+|     deja la página corrida sin forma de volver.
+|   - Nada depende de `hover`: en un teléfono no existe.
+|   - Ningún botón pegado al borde inferior de la ventana, que es justo donde
+|     WhatsApp pone su barra.
+*/
 const step = ref<1 | 2 | 3 | 4>(1)
+const root = ref<HTMLElement | null>(null)
 
 const serviceId = ref<number | null>(null)
 /** Un combo elegido en el paso 1. Excluyente con `serviceId`. */
@@ -54,33 +68,49 @@ const chosenChain = ref<PublicChainSlot | null>(null)
 
 const name = ref('')
 const phone = ref('')
+const email = ref('')
 const notes = ref('')
 const error = ref<string | null>(null)
 const done = ref<BookingResult | null>(null)
 
-const today = new Date().toISOString().slice(0, 10)
+const today = new Date().toLocaleDateString('sv-SE')
+/** Desde dónde se piden los días de las fichas rápidas. */
 const from = ref(today)
+/** El mes que está mirando el calendario, como su día 1. */
+const monthFrom = ref(today)
+const MES_COMPLETO = ref(42)
 
-/*
- * Para un combo, los días se consultan con su PRIMER servicio.
- *
- * Es un filtro necesario pero no suficiente: un día sin hueco para el primero
- * tampoco lo tiene para la cadena, así que se puede apagar sin equivocarse.
- * Al revés no vale, y por eso el día que queda encendido lo confirma la
- * cadena. Calcular la cadena completa de catorce días para pintar la tira
- * sería caro y nadie lo miraría.
- */
 const packages = computed<PublicPackage[]>(() => props.page.packages ?? [])
 
 const pack = computed<PublicPackage | null>(
   () => packages.value.find((p) => p.id === packageId.value) ?? null,
 )
 
+/*
+ * Para una visita de varias partes, los días se consultan con su PRIMER
+ * servicio. Es un filtro necesario pero no suficiente: un día sin hueco para
+ * el primero tampoco lo tiene para la cadena, así que se puede apagar sin
+ * equivocarse. Al revés no vale, y por eso el día que queda encendido lo
+ * confirma la cadena. Calcular la cadena completa de un mes para pintar el
+ * calendario sería caro y nadie miraría la diferencia.
+ */
 const daysServiceId = computed(
   () => serviceId.value ?? pack.value?.services[0]?.id ?? chainIds.value[0] ?? null,
 )
 
-const { data: daysData, isFetching: loadingDays } = usePublicDays(slug, daysServiceId, from, resourceId)
+const { data: daysData, isFetching: loadingDays } = usePublicDays(
+  slug,
+  daysServiceId,
+  from,
+  resourceId,
+)
+const { data: monthData, isFetching: loadingMonth } = usePublicDays(
+  slug,
+  daysServiceId,
+  monthFrom,
+  resourceId,
+  MES_COMPLETO,
+)
 const { data: slotsData, isFetching: loadingSlots } = usePublicSlots(slug, serviceId, date, resourceId)
 const { data: chainData, isFetching: loadingChain } = usePublicChain(
   slug,
@@ -95,7 +125,6 @@ const service = computed<PublicService | null>(
   () => props.page.services.find((s) => s.id === serviceId.value) ?? null,
 )
 
-/** Qué se está reservando, dicho en una línea. */
 /** Los servicios sueltos elegidos, en el orden en que se marcaron. */
 const chainServices = computed<PublicService[]>(() =>
   chainIds.value
@@ -117,18 +146,32 @@ const whatLabel = computed(() => {
   return null
 })
 
+const totalLabel = computed(() => {
+  if (pack.value) return money(pack.value.total)
+  if (service.value) return money(service.value.price)
+  if (chainServices.value.length) return money(chainTotal.value)
+
+  return null
+})
+
+const minutesLabel = computed(() => {
+  if (pack.value) return pack.value.total_minutes
+  if (service.value) return service.value.duration_min
+  if (chainServices.value.length) return chainMinutes.value
+
+  return null
+})
+
 /**
  * Quién se puede pedir.
  *
  * Para un servicio suelto, sólo quien lo presta: ofrecer al resto lleva a un
- * hueco vacío. Para un combo, quien preste AL MENOS UNO -- pedirla es una
- * preferencia, y el servidor dice qué parte tuvo que tomar otra persona en
- * vez de esconder la hora entera.
+ * hueco vacío. Para una visita de varias partes, quien preste AL MENOS UNA --
+ * pedirla es una preferencia, y el servidor dice qué parte tuvo que tomar otra
+ * persona en vez de esconder la hora entera.
  */
 const resources = computed<PublicResource[]>(() => {
-  const varios = pack.value
-    ? pack.value.services.map((s) => s.id)
-    : chainIds.value
+  const varios = pack.value ? pack.value.services.map((s) => s.id) : chainIds.value
 
   if (varios.length) {
     return props.page.resources.filter((r) =>
@@ -139,13 +182,17 @@ const resources = computed<PublicResource[]>(() => {
   return props.page.resources.filter((r) => service.value?.resource_ids.includes(r.id) ?? false)
 })
 
+const chosenResource = computed(
+  () => resources.value.find((r) => r.id === resourceId.value) ?? null,
+)
+
 /** Por qué esa parte quedó con otra persona, dicho como en el mostrador. */
 function legNote(leg: PublicChainLeg): string | null {
   if (leg.changed_reason === null) {
     return null
   }
 
-  const quien = resources.value.find((r) => r.id === resourceId.value)?.name
+  const quien = chosenResource.value?.name
 
   if (leg.changed_reason === 'skill') {
     return quien ? `${quien} no hace este servicio` : 'Lo toma otra persona'
@@ -153,6 +200,98 @@ function legNote(leg: PublicChainLeg): string | null {
 
   return quien ? `${quien} no está libre a esa hora` : 'Lo toma otra persona por disponibilidad'
 }
+
+/*
+|------------------------------------------------------------------------------
+| Días y horas
+|------------------------------------------------------------------------------
+*/
+
+/** `YYYY-MM-DD` → si ese día tiene algo libre, para apagar el calendario. */
+const monthAvailability = computed<Record<string, boolean>>(() => {
+  const result: Record<string, boolean> = {}
+
+  for (const d of [...(daysData.value?.days ?? []), ...(monthData.value?.days ?? [])]) {
+    result[d.date] = d.has_slots
+  }
+
+  return result
+})
+
+/** Los primeros días con cupo, para tocar uno sin abrir el calendario. */
+const quickDays = computed(() =>
+  (daysData.value?.days ?? []).filter((d) => d.has_slots).slice(0, 6),
+)
+
+function dayChip(isoDate: string): string {
+  const d = new Date(`${isoDate}T12:00:00`)
+  const manana = new Date(`${today}T12:00:00`)
+  manana.setDate(manana.getDate() + 1)
+
+  if (isoDate === today) return 'Hoy'
+  if (isoDate === manana.toLocaleDateString('sv-SE')) return 'Mañana'
+
+  return d.toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric' })
+}
+
+function dayLabel(isoDate: string): string {
+  return new Date(`${isoDate}T12:00:00`).toLocaleDateString('es-CO', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })
+}
+
+/**
+ * En qué franja cae una hora, leyendo la ETIQUETA y no la fecha.
+ *
+ * La etiqueta viene en hora del negocio. Si se agrupara con `new Date()` se
+ * usaría la zona del teléfono, y quien reserve desde otro país vería su
+ * manicure de las 9 am agrupada en "Tarde".
+ */
+function franja(label: string): 'manana' | 'tarde' | 'noche' {
+  const match = /^(\d{1,2}):(\d{2})\s*(am|pm)$/i.exec(label.trim())
+
+  if (!match) {
+    return 'manana'
+  }
+
+  let hour = Number(match[1]) % 12
+  if (match[3].toLowerCase() === 'pm') hour += 12
+
+  if (hour < 12) return 'manana'
+
+  return hour < 18 ? 'tarde' : 'noche'
+}
+
+const FRANJAS = [
+  { key: 'manana', label: 'Mañana' },
+  { key: 'tarde', label: 'Tarde' },
+  { key: 'noche', label: 'Noche' },
+] as const
+
+/** Las horas de la cadena agrupadas por franja, sin franjas vacías. */
+const chainByFranja = computed(() =>
+  FRANJAS.map((f) => ({
+    ...f,
+    slots: (chainData.value?.slots ?? []).filter((s) => franja(s.label) === f.key),
+  })).filter((f) => f.slots.length > 0),
+)
+
+const slotsByFranja = computed(() =>
+  FRANJAS.map((f) => ({
+    ...f,
+    slots: (slotsData.value?.slots ?? []).filter((s) => franja(s.label) === f.key),
+  })).filter((f) => f.slots.length > 0),
+)
+
+const loadingHoras = computed(() => loadingSlots.value || loadingChain.value)
+
+/*
+|------------------------------------------------------------------------------
+| Navegación
+|------------------------------------------------------------------------------
+*/
 
 watch(
   () => props.preselected,
@@ -170,6 +309,18 @@ watch(
   { immediate: true },
 )
 
+/*
+ * Cambiar de paso sube la vista al principio del bloque.
+ *
+ * En una pantalla corta, tocar un servicio que estaba abajo deja el paso
+ * siguiente fuera de cuadro: se ve la misma lista y parece que el toque no
+ * hizo nada.
+ */
+watch(step, async () => {
+  await nextTick()
+  root.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+})
+
 function money(value: number): string {
   return new Intl.NumberFormat('es-CO', {
     style: 'currency',
@@ -178,14 +329,18 @@ function money(value: number): string {
   }).format(value)
 }
 
-function pickService(id: number): void {
-  serviceId.value = id
-  packageId.value = null
-  chainIds.value = []
+function resetChoice(): void {
   resourceId.value = null
   date.value = null
   startsAt.value = null
   chosenChain.value = null
+}
+
+function pickService(id: number): void {
+  serviceId.value = id
+  packageId.value = null
+  chainIds.value = []
+  resetChoice()
   step.value = 2
 }
 
@@ -193,10 +348,7 @@ function pickPackage(id: number): void {
   packageId.value = id
   serviceId.value = null
   chainIds.value = []
-  resourceId.value = null
-  date.value = null
-  startsAt.value = null
-  chosenChain.value = null
+  resetChoice()
   step.value = 2
 }
 
@@ -212,10 +364,7 @@ function confirmChainServices(): void {
 
   serviceId.value = null
   packageId.value = null
-  resourceId.value = null
-  date.value = null
-  startsAt.value = null
-  chosenChain.value = null
+  resetChoice()
   step.value = 2
 }
 
@@ -225,6 +374,12 @@ function pickResource(id: number | null): void {
   startsAt.value = null
   chosenChain.value = null
   step.value = 3
+}
+
+function pickDay(value: string): void {
+  date.value = value
+  startsAt.value = null
+  chosenChain.value = null
 }
 
 function pickSlot(slot: { starts_at: string; resource_id: number }): void {
@@ -251,16 +406,18 @@ function back(): void {
   }
 }
 
-function dayLabel(iso: string): string {
-  return new Date(`${iso}T12:00:00`).toLocaleDateString('es-CO', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  })
-}
+/*
+|------------------------------------------------------------------------------
+| Datos y envío
+|------------------------------------------------------------------------------
+*/
+
+const emailValido = computed(() => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.value.trim()))
+const telefonoValido = computed(() => phone.value.replace(/\D/g, '').length >= 7)
+const nombreValido = computed(() => name.value.trim().length > 2)
 
 const canSubmit = computed(
-  () => name.value.trim().length > 2 && phone.value.replace(/\D/g, '').length >= 7 && !booking.value,
+  () => nombreValido.value && telefonoValido.value && emailValido.value && !booking.value,
 )
 
 async function submit(): Promise<void> {
@@ -290,6 +447,7 @@ async function submit(): Promise<void> {
       ...cita,
       client_name: name.value.trim(),
       client_phone: phone.value.trim(),
+      client_email: email.value.trim(),
       notes: notes.value.trim() || null,
     })
   } catch (e) {
@@ -311,27 +469,35 @@ function restart(): void {
   packageId.value = null
   chainIds.value = []
   armando.value = false
-  resourceId.value = null
-  date.value = null
-  startsAt.value = null
-  chosenChain.value = null
+  resetChoice()
   name.value = ''
   phone.value = ''
+  email.value = ''
   notes.value = ''
 }
+
+const TITULOS = ['¿Qué te vas a hacer?', '¿Con quién?', '¿Cuándo?', 'Tus datos']
 </script>
 
 <template>
   <!-- Confirmación -->
-  <div v-if="done" class="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center">
-    <p class="text-3xl">✓</p>
-    <h3 class="mt-2 text-lg font-semibold text-emerald-900">{{ done.message }}</h3>
+  <div
+    v-if="done"
+    class="overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center"
+  >
+    <p
+      class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-600 text-2xl text-white"
+    >
+      ✓
+    </p>
+    <h3 class="mt-3 text-lg font-semibold text-emerald-900">{{ done.message }}</h3>
+
     <p v-if="done.items.length < 2" class="mt-3 text-emerald-900">
       <b>{{ done.service }}</b> con {{ done.resource }}<br />
       {{ done.date_label }} a las {{ done.time_label }}
     </p>
 
-    <!-- Visita de varios servicios: se detalla parte por parte. Enterarse al
+    <!-- Visita de varias partes: se detalla parte por parte. Enterarse al
          llegar de que la segunda mitad la atiende otra persona es lo que hay
          que evitar. -->
     <div v-else class="mt-3 text-emerald-900">
@@ -341,63 +507,105 @@ function restart(): void {
         {{ item.time_label }} · {{ item.service }} con {{ item.resource }}
       </p>
     </div>
-    <p class="mt-3 text-sm text-emerald-800">
-      Si necesitas cambiarla o cancelarla, escríbenos.
+
+    <p class="mt-4 text-sm text-emerald-800">
+      Te llegará la confirmación por WhatsApp. Si necesitas cambiarla o cancelarla, escríbenos.
       <!-- Cancelar no se puede desde acá a propósito: una URL pública que
            cancela citas es una URL pública que cancela las de otra persona. -->
     </p>
-    <button type="button" class="mt-4 text-sm text-emerald-900 underline" @click="restart">
+    <button
+      type="button"
+      class="mt-4 min-h-11 text-sm font-medium text-emerald-900 underline"
+      @click="restart"
+    >
       Reservar otra cita
     </button>
   </div>
 
-  <div v-else>
-    <!-- Migas -->
-    <div class="mb-4 flex items-center gap-2 text-xs text-slate-500">
-      <button v-if="step > 1" type="button" class="underline" @click="back">Atrás</button>
-      <span>Paso {{ step }} de 4</span>
-      <span v-if="whatLabel" class="truncate">· {{ whatLabel }}</span>
+  <div v-else ref="root" class="scroll-mt-4 [touch-action:manipulation]">
+    <!-- Cabecera del paso: dónde voy, qué llevo elegido y cómo devolverme.
+         En una pantalla corta esto es lo único que orienta. -->
+    <div class="mb-4">
+      <div class="flex items-center gap-3">
+        <button
+          v-if="step > 1"
+          type="button"
+          class="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-lg text-slate-500"
+          aria-label="Atrás"
+          @click="back"
+        >
+          ‹
+        </button>
+
+        <div class="min-w-0 flex-1">
+          <p class="text-base font-semibold text-slate-900">{{ TITULOS[step - 1] }}</p>
+          <p v-if="whatLabel" class="truncate text-xs text-slate-500">
+            {{ whatLabel }}
+            <span v-if="totalLabel">&nbsp;· {{ totalLabel }}</span>
+            <span v-if="minutesLabel">&nbsp;· {{ minutesLabel }} min</span>
+            <span v-if="chosenResource">&nbsp;· con {{ chosenResource.name }}</span>
+            <span v-else-if="step > 2">&nbsp;· con quien esté disponible</span>
+          </p>
+        </div>
+      </div>
+
+      <!-- Barra de progreso en vez de "paso 3 de 4": se lee de un vistazo y no
+           roba una línea de alto. -->
+      <div class="mt-3 flex gap-1">
+        <span
+          v-for="i in 4"
+          :key="i"
+          class="h-1 flex-1 rounded-full transition"
+          :class="i <= step ? 'bg-slate-900' : 'bg-slate-200'"
+        />
+      </div>
     </div>
 
     <!-- 1. Qué se va a hacer -->
-    <div v-if="step === 1" class="grid gap-3 sm:grid-cols-2">
+    <div v-if="step === 1" class="flex flex-col gap-3">
       <!-- Los combos van primero y marcados: es lo que el negocio quiere
            vender, y lo que le sale más barato a quien reserva. -->
       <template v-if="packages.length">
-        <p class="text-sm font-medium text-slate-700 sm:col-span-2">Combos</p>
+        <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Combos</p>
 
         <button
           v-for="combo in packages"
           :key="`p${combo.id}`"
           type="button"
-          class="flex gap-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-left transition hover:border-emerald-400"
+          class="flex min-h-11 items-center gap-3 rounded-xl border border-emerald-300 bg-emerald-50/60 p-3 text-left active:bg-emerald-100"
           @click="pickPackage(combo.id)"
         >
           <img
             v-if="combo.image_url"
             :src="combo.image_url"
             :alt="combo.name"
-            class="h-16 w-16 shrink-0 rounded object-cover"
+            class="h-16 w-16 shrink-0 rounded-lg object-cover"
           />
           <span class="min-w-0 flex-1">
-            <span class="block font-medium text-slate-800">{{ combo.name }}</span>
+            <span class="flex items-center gap-2">
+              <span class="font-medium text-slate-900">{{ combo.name }}</span>
+              <span
+                v-if="combo.discount > 0"
+                class="rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white"
+              >
+                -{{ Math.round(combo.savings_percent) }}%
+              </span>
+            </span>
             <span class="mt-0.5 block truncate text-xs text-slate-500">
               {{ combo.services.map((s) => s.name).join(' + ') }}
             </span>
-            <span class="mt-1 block text-sm text-slate-600">
+            <span class="mt-1 block text-sm text-slate-700">
               <b>{{ money(combo.total) }}</b>
               <span v-if="combo.discount > 0" class="ml-1 text-slate-400 line-through">
                 {{ money(combo.list_total) }}
               </span>
               · {{ combo.total_minutes }} min
             </span>
-            <span v-if="combo.discount > 0" class="mt-0.5 block text-xs font-medium text-emerald-700">
-              Ahorras {{ money(combo.discount) }}
-            </span>
           </span>
+          <span class="shrink-0 text-slate-300">›</span>
         </button>
 
-        <p class="mt-2 text-sm font-medium text-slate-700 sm:col-span-2">Servicios</p>
+        <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Servicios</p>
       </template>
 
       <!-- Armar una visita de varias cosas.
@@ -407,21 +615,21 @@ function restart(): void {
       <button
         v-if="page.services.length > 1"
         type="button"
-        class="text-left text-sm text-slate-500 underline sm:col-span-2"
+        class="min-h-11 rounded-xl border border-dashed border-slate-300 px-3 py-2 text-left text-sm text-slate-600 active:bg-slate-50"
         @click="armando = !armando"
       >
-        {{ armando ? 'Prefiero un solo servicio' : '¿Te vas a hacer varias cosas? Arma tu visita' }}
+        {{ armando ? '← Prefiero un solo servicio' : '＋ ¿Te vas a hacer varias cosas? Arma tu visita' }}
       </button>
 
       <button
         v-for="item in page.services"
         :key="item.id"
         type="button"
-        class="flex gap-3 rounded-lg border bg-white p-3 text-left transition"
+        class="flex min-h-11 items-center gap-3 rounded-xl border bg-white p-3 text-left transition active:bg-slate-50"
         :class="
           armando && chainIds.includes(item.id)
-            ? 'border-slate-800 ring-1 ring-slate-800'
-            : 'border-slate-200 hover:border-slate-400'
+            ? 'border-slate-900 ring-1 ring-slate-900'
+            : 'border-slate-200'
         "
         @click="armando ? toggleChainService(item.id) : pickService(item.id)"
       >
@@ -429,237 +637,324 @@ function restart(): void {
           v-if="item.image_url"
           :src="item.image_url"
           :alt="item.name"
-          class="h-16 w-16 shrink-0 rounded object-cover"
+          class="h-16 w-16 shrink-0 rounded-lg object-cover"
         />
+
+        <!-- Marcando: la casilla lleva el número de orden de la visita. Sin
+             él, "manos y pies" y "pies y manos" se verían igual. -->
+        <span
+          v-if="armando"
+          class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold"
+          :class="
+            chainIds.includes(item.id)
+              ? 'border-slate-900 bg-slate-900 text-white'
+              : 'border-slate-300 text-transparent'
+          "
+        >
+          {{ chainIds.indexOf(item.id) + 1 }}
+        </span>
+
         <span class="min-w-0 flex-1">
-          <span class="block font-medium text-slate-800">
-            {{ item.name }}
-            <!-- El número dice el orden de la visita, que es el orden en que
-                 se marcó: primero las manos, después los pies. -->
-            <span v-if="armando && chainIds.includes(item.id)" class="ml-1 text-xs text-slate-500">
-              {{ chainIds.indexOf(item.id) + 1 }}
-            </span>
-          </span>
+          <span class="block font-medium text-slate-900">{{ item.name }}</span>
           <span v-if="item.description" class="mt-0.5 block line-clamp-2 text-xs text-slate-500">
             {{ item.description }}
           </span>
-          <span class="mt-1 block text-sm text-slate-600">
+          <span class="mt-1 block text-sm text-slate-700">
             {{ money(item.price) }} · {{ item.duration_min }} min
           </span>
         </span>
+
+        <span v-if="!armando" class="shrink-0 text-slate-300">›</span>
       </button>
 
       <button
         v-if="armando && chainIds.length"
         type="button"
-        class="rounded-lg bg-slate-900 px-4 py-2.5 font-medium text-white transition hover:bg-slate-800 sm:col-span-2"
+        class="min-h-12 rounded-xl bg-slate-900 px-4 py-3 font-medium text-white active:bg-slate-700"
         @click="confirmChainServices"
       >
-        Continuar · {{ chainIds.length }} servicios · {{ money(chainTotal) }} · {{ chainMinutes }} min
+        Continuar · {{ money(chainTotal) }} · {{ chainMinutes }} min
       </button>
 
-      <p v-if="!page.services.length && !packages.length" class="text-sm text-slate-500 sm:col-span-2">
+      <p v-if="!page.services.length && !packages.length" class="text-sm text-slate-500">
         Este negocio todavía no ofrece reservas en línea. Escríbenos y te agendamos.
       </p>
     </div>
 
-    <!-- 2. Profesional -->
-    <div v-else-if="step === 2" class="grid gap-3 sm:grid-cols-2">
+    <!-- 2. Con quién -->
+    <div v-else-if="step === 2" class="flex flex-col gap-3">
       <button
         type="button"
-        class="rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-slate-400"
+        class="flex min-h-11 items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left active:bg-slate-50"
         @click="pickResource(null)"
       >
-        <span class="block font-medium text-slate-800">Cualquiera</span>
-        <span class="mt-0.5 block text-xs text-slate-500">
-          La primera que tenga disponible. Suele haber más horas.
+        <span
+          class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500"
+        >
+          ✦
         </span>
+        <span class="min-w-0 flex-1">
+          <span class="block font-medium text-slate-900">Quien esté disponible</span>
+          <span class="mt-0.5 block text-xs text-slate-500">Suele haber más horas para elegir.</span>
+        </span>
+        <span class="shrink-0 text-slate-300">›</span>
       </button>
 
       <button
         v-for="person in resources"
         :key="person.id"
         type="button"
-        class="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-slate-400"
+        class="flex min-h-11 items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left active:bg-slate-50"
         @click="pickResource(person.id)"
       >
         <img
           v-if="person.photo_url"
           :src="person.photo_url"
           :alt="person.name"
-          class="h-10 w-10 shrink-0 rounded-full object-cover"
+          class="h-11 w-11 shrink-0 rounded-full object-cover"
         />
         <span
           v-else
-          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm text-slate-500"
+          class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-100 font-medium text-slate-500"
         >
           {{ person.name.charAt(0) }}
         </span>
-        <span class="font-medium text-slate-800">{{ person.name }}</span>
+        <span class="min-w-0 flex-1 font-medium text-slate-900">{{ person.name }}</span>
+        <span class="shrink-0 text-slate-300">›</span>
       </button>
+
+      <p v-if="isChain" class="text-xs text-slate-500">
+        Si esa persona no presta alguno de los servicios, te decimos quién toma esa parte en vez de
+        esconderte la hora.
+      </p>
     </div>
 
-    <!-- 3. Día y hora -->
-    <div v-else-if="step === 3">
-      <p class="mb-2 text-sm font-medium text-slate-700">Elige el día</p>
+    <!-- 3. Cuándo -->
+    <div v-else-if="step === 3" class="flex flex-col gap-4">
+      <!-- Fichas rápidas primero: la mayoría reserva para esta semana y así no
+           tiene que leer un calendario. -->
+      <div v-if="quickDays.length">
+        <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Los días más cercanos
+        </p>
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-for="day in quickDays"
+            :key="day.date"
+            type="button"
+            class="min-h-11 rounded-xl border px-3 text-sm capitalize transition"
+            :class="
+              date === day.date
+                ? 'border-slate-900 bg-slate-900 font-medium text-white'
+                : 'border-slate-200 bg-white text-slate-700'
+            "
+            @click="pickDay(day.date)"
+          >
+            {{ dayChip(day.date) }}
+          </button>
+        </div>
+      </div>
 
-      <p v-if="loadingDays" class="text-sm text-slate-500">Buscando disponibilidad…</p>
+      <p v-else-if="loadingDays" class="text-sm text-slate-500">Buscando disponibilidad…</p>
 
-      <div v-else class="flex flex-wrap gap-2">
-        <button
-          v-for="day in daysData?.days ?? []"
-          :key="day.date"
-          type="button"
-          class="rounded-lg border px-3 py-2 text-sm transition disabled:cursor-not-allowed disabled:opacity-40"
-          :class="
-            date === day.date
-              ? 'border-slate-800 bg-slate-800 text-white'
-              : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400'
-          "
-          :disabled="!day.has_slots"
-          @click="date = day.date"
-        >
-          {{ dayLabel(day.date) }}
-        </button>
+      <div>
+        <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          O elige en el calendario
+        </p>
+        <MonthCalendar
+          :model-value="date"
+          :available="monthAvailability"
+          :min="today"
+          :loading="loadingMonth"
+          @update:model-value="pickDay"
+          @month-change="monthFrom = $event < today ? today : $event"
+        />
       </div>
 
       <template v-if="date">
-        <p class="mb-2 mt-5 text-sm font-medium text-slate-700">Elige la hora</p>
+        <div>
+          <p class="mb-2 text-sm font-medium first-letter:uppercase text-slate-800">{{ dayLabel(date) }}</p>
 
-        <p v-if="loadingSlots || loadingChain" class="text-sm text-slate-500">Cargando…</p>
+          <p v-if="loadingHoras" class="text-sm text-slate-500">Cargando horas…</p>
 
-        <!-- Visita de varias partes: la hora es la de TODA la visita, no la
-             del primer servicio. Cada botón sabe si todo queda con la misma
-             persona. -->
-        <template v-else-if="isChain">
-          <p v-if="!chainData?.slots.length" class="text-sm text-slate-500">
-            Ese día no cabe todo lo que elegiste. Prueba con otro día o con menos servicios.
-          </p>
+          <!-- Visita de varias partes: la hora es la de TODA la visita, no la
+               del primer servicio. -->
+          <template v-else-if="isChain">
+            <p v-if="!chainByFranja.length" class="text-sm text-slate-500">
+              Ese día no cabe todo lo que elegiste. Prueba con otro día o con menos servicios.
+            </p>
 
-          <div v-else class="flex flex-wrap gap-2">
-            <button
-              v-for="(slot, i) in chainData.slots"
-              :key="i"
-              type="button"
-              class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition hover:border-slate-400"
-              @click="pickChain(slot)"
-            >
-              {{ slot.label }}
-              <!-- Si se pidió a alguien, el ✓ es que se le respetó. Marcar en
-                   verde una hora que quedó entera con OTRA persona sería
-                   decirle que sí a algo que no pidió. -->
-              <span
-                v-if="resourceId ? slot.preferred_honored : slot.same_person"
-                class="ml-1 text-xs text-emerald-600"
-                title="Toda la visita con la misma persona"
-              >
-                ✓
-              </span>
-              <span v-else class="ml-1 text-xs text-amber-600" title="Cambia de persona">
-                ⇄
-              </span>
-            </button>
-          </div>
-        </template>
+            <div v-for="grupo in chainByFranja" :key="grupo.key" class="mb-3">
+              <p class="mb-1.5 text-xs text-slate-400">{{ grupo.label }}</p>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  v-for="(slot, i) in grupo.slots"
+                  :key="i"
+                  type="button"
+                  class="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 active:bg-slate-50"
+                  @click="pickChain(slot)"
+                >
+                  {{ slot.label }}
+                  <!-- Si se pidió a alguien, el ✓ es que se le respetó. Marcar
+                       en verde una hora que quedó entera con OTRA persona sería
+                       decirle que sí a algo que no pidió. -->
+                  <span
+                    v-if="resourceId ? slot.preferred_honored : slot.same_person"
+                    class="ml-0.5 text-xs text-emerald-600"
+                    title="Toda la visita con la misma persona"
+                  >
+                    ✓
+                  </span>
+                  <span v-else class="ml-0.5 text-xs text-amber-600" title="Cambia de persona">
+                    ⇄
+                  </span>
+                </button>
+              </div>
+            </div>
+          </template>
 
-        <p v-else-if="!slotsData?.slots.length" class="text-sm text-slate-500">
-          No quedan horas ese día. Prueba con otro.
-        </p>
+          <template v-else>
+            <p v-if="!slotsByFranja.length" class="text-sm text-slate-500">
+              No quedan horas ese día. Prueba con otro.
+            </p>
 
-        <div v-else class="flex flex-wrap gap-2">
-          <button
-            v-for="(slot, i) in slotsData.slots"
-            :key="i"
-            type="button"
-            class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition hover:border-slate-400"
-            @click="pickSlot(slot)"
-          >
-            {{ slot.label }}
-            <!-- Con "cualquiera" hay que decir con quién queda: enterarse al
-                 llegar al local de que atiende otra persona es peor que
-                 preguntarlo antes. -->
-            <span v-if="resourceId === null" class="ml-1 text-xs text-slate-400">
-              {{ slot.resource_name }}
-            </span>
-          </button>
+            <div v-for="grupo in slotsByFranja" :key="grupo.key" class="mb-3">
+              <p class="mb-1.5 text-xs text-slate-400">{{ grupo.label }}</p>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  v-for="(slot, i) in grupo.slots"
+                  :key="i"
+                  type="button"
+                  class="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 active:bg-slate-50"
+                  @click="pickSlot(slot)"
+                >
+                  {{ slot.label }}
+                  <!-- Con "cualquiera" hay que decir con quién queda: enterarse
+                       al llegar al local de que atiende otra persona es peor
+                       que saberlo antes. -->
+                  <span v-if="resourceId === null" class="ml-1 text-xs text-slate-400">
+                    {{ slot.resource_name }}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </template>
         </div>
       </template>
     </div>
 
     <!-- 4. Datos -->
-    <form v-else class="flex flex-col gap-3" @submit.prevent="submit">
-      <div class="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-700">
+    <form v-else class="flex flex-col gap-4" @submit.prevent="submit">
+      <div class="rounded-xl bg-slate-50 p-4 text-sm text-slate-700">
         <template v-if="chosenChain">
-          <b>{{ pack ? pack.name : 'Tu visita' }}</b>
-          · {{ money(pack ? pack.total : chainTotal) }}
-          <span v-if="pack && pack.discount > 0" class="text-emerald-700">
-            (ahorras {{ money(pack.discount) }})
-          </span>
-          <span v-else-if="!pack" class="text-slate-500">· {{ chainMinutes }} min</span>
-          <br />
-          {{ date ? dayLabel(date) : '' }}
+          <p class="font-semibold text-slate-900">
+            {{ pack ? pack.name : 'Tu visita' }}
+          </p>
+          <p>
+            {{ money(pack ? pack.total : chainTotal) }}
+            <span v-if="pack && pack.discount > 0" class="text-emerald-700">
+              · ahorras {{ money(pack.discount) }}
+            </span>
+            <span v-else>· {{ chainMinutes }} min</span>
+          </p>
+          <p class="mt-1 first-letter:uppercase">{{ date ? dayLabel(date) : '' }}</p>
           <!-- Con quién queda cada parte, y por qué, antes de confirmar. Un
                cambio de persona que se descubre en el local es una discusión
                en el mostrador. -->
-          <span v-for="leg in chosenChain.legs" :key="leg.service_id" class="mt-1 block text-xs">
+          <p v-for="leg in chosenChain.legs" :key="leg.service_id" class="mt-1 text-xs">
             {{ leg.label }} · {{ leg.service_name }} con {{ leg.resource_name }}
             <span v-if="legNote(leg)" class="text-amber-700">— {{ legNote(leg) }}</span>
-          </span>
+          </p>
         </template>
 
         <template v-else>
-          <b>{{ service?.name }}</b>
-          <span v-if="service"> · {{ money(service.price) }} · {{ service.duration_min }} min</span>
-          <br />
-          {{ date ? dayLabel(date) : '' }}
-          <span v-if="startsAt">
-            a las
-            {{
-              new Date(startsAt).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })
-            }}
-          </span>
+          <p class="font-semibold text-slate-900">{{ service?.name }}</p>
+          <p v-if="service">{{ money(service.price) }} · {{ service.duration_min }} min</p>
+          <p class="mt-1 first-letter:uppercase">
+            {{ date ? dayLabel(date) : '' }}
+            <span v-if="startsAt">
+              a las
+              {{
+                new Date(startsAt).toLocaleTimeString('es-CO', {
+                  hour: 'numeric',
+                  minute: '2-digit',
+                })
+              }}
+            </span>
+          </p>
         </template>
       </div>
 
-      <label class="text-sm text-slate-700">
+      <!-- `text-base` en todos los campos: por debajo de 16px iOS hace zoom al
+           enfocar y el formulario queda corrido. -->
+      <label class="text-sm font-medium text-slate-700">
         Tu nombre
         <input
           v-model="name"
-          class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-800"
+          type="text"
+          autocomplete="name"
+          enterkeyhint="next"
+          class="mt-1 min-h-12 w-full rounded-xl border border-slate-300 px-3 text-base text-slate-900 outline-none focus:border-slate-900"
           :disabled="booking"
           required
         />
       </label>
 
-      <label class="text-sm text-slate-700">
+      <label class="text-sm font-medium text-slate-700">
         Tu WhatsApp
         <input
           v-model="phone"
+          type="tel"
           inputmode="tel"
-          class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-800"
+          autocomplete="tel"
+          enterkeyhint="next"
+          class="mt-1 min-h-12 w-full rounded-xl border border-slate-300 px-3 text-base text-slate-900 outline-none focus:border-slate-900"
           :disabled="booking"
           required
         />
-        <span class="mt-1 block text-xs text-slate-500">
-          Es para confirmarte la cita. No lo usamos para nada más.
+        <span class="mt-1 block text-xs font-normal text-slate-500">
+          Para confirmarte la cita. No lo usamos para nada más.
         </span>
       </label>
 
-      <label class="text-sm text-slate-700">
+      <label class="text-sm font-medium text-slate-700">
+        Tu correo
+        <input
+          v-model="email"
+          type="email"
+          inputmode="email"
+          autocomplete="email"
+          autocapitalize="off"
+          spellcheck="false"
+          enterkeyhint="next"
+          class="mt-1 min-h-12 w-full rounded-xl border px-3 text-base text-slate-900 outline-none focus:border-slate-900"
+          :class="email && !emailValido ? 'border-amber-400' : 'border-slate-300'"
+          :disabled="booking"
+          required
+        />
+        <span v-if="email && !emailValido" class="mt-1 block text-xs font-normal text-amber-700">
+          Revisa el correo, parece incompleto.
+        </span>
+      </label>
+
+      <label class="text-sm font-medium text-slate-700">
         Algo que debamos saber (opcional)
         <textarea
           v-model="notes"
           rows="2"
-          class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-slate-800"
+          enterkeyhint="done"
+          class="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-base text-slate-900 outline-none focus:border-slate-900"
           :disabled="booking"
         />
       </label>
 
-      <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+      <p v-if="error" class="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
 
+      <!-- El botón va en el flujo del documento, no fijo abajo: en el navegador
+           de WhatsApp la barra del sistema tapa ese borde. -->
       <button
         type="submit"
-        class="rounded-lg bg-slate-900 px-4 py-2.5 font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+        class="min-h-12 rounded-xl bg-slate-900 px-4 py-3 font-medium text-white transition active:bg-slate-700 disabled:opacity-40"
         :disabled="!canSubmit"
       >
         {{ booking ? 'Reservando…' : 'Confirmar reserva' }}
