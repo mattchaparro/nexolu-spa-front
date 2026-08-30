@@ -32,6 +32,17 @@ export interface Appointment {
   discount_amount: number
   total: number | null
   commission_total: number | null
+  /**
+   * El abono con que el cliente separó.
+   *
+   * `total` sigue siendo la venta completa: el abono no es un descuento, es
+   * plata de la misma venta que entró antes. `amount_due` es lo que falta
+   * cobrar cuando la persona se sienta.
+   */
+  deposit_amount: number
+  deposit_paid_at: string | null
+  deposit_paid: number
+  amount_due: number
   starts_at: string
   ends_at: string
   label: string
@@ -132,6 +143,35 @@ export function useCheckout() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appointments'] })
       queryClient.invalidateQueries({ queryKey: ['agenda'] })
+    },
+  })
+}
+
+/**
+ * Registrar que el abono llegó.
+ *
+ * No se cobra en línea: el cliente transfiere y alguien del local confirma.
+ * Por eso pide método de pago -- sin él la plata entra sin quedar en ninguna
+ * cuenta y el cierre del día no cuadra.
+ */
+export function useRegisterDeposit() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      ...body
+    }: {
+      id: number
+      payment_method_id: number
+      amount?: number
+      reference?: string
+    }) => (await httpClient.post<Appointment>(`/appointments/${id}/deposit`, body)).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] })
+      queryClient.invalidateQueries({ queryKey: ['agenda'] })
+      // El abono entra a la caja el día que llega, no el del servicio.
+      queryClient.invalidateQueries({ queryKey: ['cash'] })
     },
   })
 }

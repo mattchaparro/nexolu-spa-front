@@ -8,7 +8,12 @@ import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 
 import StagePicker from './StagePicker.vue'
 
-import { useCancelAppointment, useCheckout, type Appointment } from '../composables/useAppointments'
+import {
+  useCancelAppointment,
+  useCheckout,
+  useRegisterDeposit,
+  type Appointment,
+} from '../composables/useAppointments'
 
 const props = defineProps<{ appointment: Appointment | null }>()
 const emit = defineEmits<{ close: []; done: []; cancelled: [] }>()
@@ -48,6 +53,62 @@ const subtotal = computed(
 const discountValue = computed(() => Math.max(0, Number(discount.value) || 0))
 const total = computed(() => Math.max(0, subtotal.value - discountValue.value))
 
+/*
+|------------------------------------------------------------------------------
+| Abono
+|------------------------------------------------------------------------------
+| El abono NO es un descuento: la venta sigue siendo el total y la comisión se
+| calcula sobre él. Lo único que cambia es cuánto pone el cliente hoy sobre el
+| mostrador.
+*/
+
+const { mutateAsync: registerDeposit, isPending: registrandoAbono } = useRegisterDeposit()
+
+/**
+ * La cita recién devuelta por el servidor, si es la misma que está abierta.
+ *
+ * El modal recibe la cita del padre, y refrescar la lista no reemplaza ese
+ * objeto: sin esto, registrar el abono lo dejaba diciendo "todavía sin
+ * registrar" y ofreciendo cobrar el total, con la plata ya recibida.
+ */
+const recienActualizada = ref<Appointment | null>(null)
+
+const cita = computed(() =>
+  recienActualizada.value?.id === props.appointment?.id
+    ? recienActualizada.value
+    : props.appointment,
+)
+
+/** Lo que se pidió de abono y todavía no llega. */
+const abonoPendiente = computed(
+  () =>
+    (cita.value?.deposit_amount ?? 0) > 0 &&
+    cita.value?.deposit_paid_at === null &&
+    cita.value?.is_paid === false,
+)
+
+const abonoRecibido = computed(() => cita.value?.deposit_paid ?? 0)
+
+/** Lo que el cliente pone hoy: el total menos lo que ya abonó. */
+const aCobrar = computed(() => Math.max(0, total.value - abonoRecibido.value))
+
+async function marcarAbono(): Promise<void> {
+  if (!props.appointment || paymentMethodId.value === null) {
+    return
+  }
+
+  error.value = null
+
+  try {
+    recienActualizada.value = await registerDeposit({
+      id: props.appointment.id,
+      payment_method_id: paymentMethodId.value,
+    })
+  } catch (e) {
+    error.value = extractErrorMessage(e, 'No pudimos registrar el abono.')
+  }
+}
+
 /** Lo que cada persona se lleva, con el descuento ya repartido. */
 const commissions = computed(() => {
   const items = props.appointment?.items ?? []
@@ -68,6 +129,8 @@ watch(open, (isOpen) => {
     discount.value = ''
     discountReason.value = ''
     error.value = null
+    // Se suelta la copia local: la cita que se abre ahora es otra.
+    recienActualizada.value = null
   }
 })
 
@@ -165,9 +228,51 @@ async function submit(): Promise<void> {
         <p v-if="discountValue > 0" class="flex justify-between text-amber-700">
           <span>Descuento</span><span class="tabular-nums">−{{ money(discountValue) }}</span>
         </p>
-        <p class="mt-1 flex justify-between border-t border-slate-100 pt-1 font-semibold text-slate-900">
+        <p
+          class="mt-1 flex justify-between border-t border-slate-100 pt-1 text-slate-900"
+          :class="abonoRecibido > 0 ? '' : 'font-semibold'"
+        >
           <span>Total</span><span class="tabular-nums">{{ money(total) }}</span>
         </p>
+        <!-- El abono se resta de lo que pone hoy, no del total: la venta y la
+             comisión siguen siendo sobre el precio completo. -->
+        <template v-if="abonoRecibido > 0">
+          <p class="flex justify-between text-emerald-700">
+            <span>Abonó</span><span class="tabular-nums">−{{ money(abonoRecibido) }}</span>
+          </p>
+          <p class="mt-1 flex justify-between border-t border-slate-100 pt-1 font-semibold text-slate-900">
+            <span>A cobrar ahora</span><span class="tabular-nums">{{ money(aCobrar) }}</span>
+          </p>
+        </template>
+      </div>
+
+      <!-- Abono pedido que todavía no llega. Se registra desde acá, con el
+           método que esté elegido arriba: si entra sin método, la plata no
+           queda en ninguna cuenta y el cierre del día no cuadra. -->
+      <div
+        v-if="abonoPendiente"
+        class="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+      >
+        <p class="font-medium">
+          Separó con abono de {{ money(cita?.deposit_amount ?? 0) }}, todavía sin registrar.
+        </p>
+        <p class="mt-0.5 text-xs">
+          {{
+            paymentMethodId === null
+              ? 'Elige arriba por dónde llegó para registrarlo.'
+              : 'Se registra con el método elegido arriba.'
+          }}
+        </p>
+        <NxButton
+          class="mt-2"
+          size="sm"
+          variant="secondary"
+          :loading="registrandoAbono"
+          :disabled="paymentMethodId === null || isPending"
+          @click="marcarAbono"
+        >
+          Registrar abono recibido
+        </NxButton>
       </div>
 
       <!-- La comisión se muestra ANTES de confirmar: quien cobra debe poder
@@ -204,7 +309,7 @@ async function submit(): Promise<void> {
         <div class="flex gap-2">
           <NxButton variant="secondary" :disabled="isPending" @click="emit('close')">Cerrar</NxButton>
           <NxButton :loading="isPending" :disabled="!canSubmit" @click="submit">
-            Cobrar {{ money(total) }}
+            Cobrar {{ money(aCobrar) }}
           </NxButton>
         </div>
       </div>

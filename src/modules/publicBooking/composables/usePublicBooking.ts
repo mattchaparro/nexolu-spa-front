@@ -77,6 +77,19 @@ export interface PublicPage {
   packages: PublicPackage[]
   resources: PublicResource[]
   hours: PublicHours[]
+  /**
+   * Cuánto hay que abonar para separar, o `null` si el negocio no pide.
+   *
+   * Viene en la carga inicial para poder decirlo ANTES de que la persona
+   * llene el formulario. Enterarse del abono después de confirmar es la peor
+   * forma de pedirlo.
+   */
+  deposit: {
+    type: 'percent' | 'fixed'
+    value: number
+    instructions: string | null
+    label: string | null
+  } | null
 }
 
 export interface PublicChainLeg {
@@ -113,6 +126,9 @@ export interface BookingResult {
   package: string | null
   /** La visita completa: qué, con quién y a qué hora cada parte. */
   items: Array<{ service: string; resource: string; time_label: string }>
+  /** Lo que hay que abonar para separar, y cómo enviarlo. */
+  deposit_amount: number | null
+  deposit_instructions: string | null
   date_label: string
   time_label: string
   message: string

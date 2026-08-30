@@ -477,6 +477,33 @@ function restart(): void {
 }
 
 const TITULOS = ['¿Qué te vas a hacer?', '¿Con quién?', '¿Cuándo?', 'Tus datos']
+
+/*
+|------------------------------------------------------------------------------
+| Abono
+|------------------------------------------------------------------------------
+| Algunos negocios piden un adelanto para separar. Es fricción, así que se dice
+| ANTES de llenar el formulario y no después de confirmar: enterarse de que hay
+| que pagar cuando ya diste tus datos es la peor forma de pedirlo.
+*/
+
+const deposit = computed(() => props.page.deposit)
+
+/** Lo que le van a pedir de abono, calculado sobre lo que eligió. */
+const depositAmount = computed(() => {
+  const policy = deposit.value
+  const total = pack.value ? pack.value.total : (service.value?.price ?? chainTotal.value)
+
+  if (!policy || !total) {
+    return 0
+  }
+
+  const bruto = policy.type === 'percent' ? total * (policy.value / 100) : policy.value
+
+  // El mismo tope que aplica el servidor: cobrar por adelantado más de lo que
+  // vale el servicio es un error de configuración, no un abono.
+  return Math.round(Math.min(bruto, total))
+})
 </script>
 
 <template>
@@ -505,6 +532,20 @@ const TITULOS = ['¿Qué te vas a hacer?', '¿Con quién?', '¿Cuándo?', 'Tus d
       <p>{{ done.date_label }}</p>
       <p v-for="(item, i) in done.items" :key="i" class="mt-1 text-sm">
         {{ item.time_label }} · {{ item.service }} con {{ item.resource }}
+      </p>
+    </div>
+
+    <!-- El abono, con las instrucciones de pago. Va acá y no en un WhatsApp
+         posterior: si no se dice ahora, la persona se va creyendo que la cita
+         ya está asegurada. -->
+    <div
+      v-if="done.deposit_amount"
+      class="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-left text-sm text-amber-900"
+    >
+      <p class="font-semibold">Falta el abono: {{ money(done.deposit_amount) }}</p>
+      <p v-if="done.deposit_instructions" class="mt-1">{{ done.deposit_instructions }}</p>
+      <p class="mt-1 text-xs">
+        Tu cita queda apartada cuando lo recibamos. Se descuenta de lo que pagues ese día.
       </p>
     </div>
 
@@ -947,6 +988,21 @@ const TITULOS = ['¿Qué te vas a hacer?', '¿Con quién?', '¿Cuándo?', 'Tus d
           :disabled="booking"
         />
       </label>
+
+      <!-- El abono se dice antes de confirmar, con el monto exacto y con qué
+           pasa si no llega. Una cita "reservada" que en realidad no lo está
+           es peor que no haber reservado. -->
+      <div
+        v-if="depositAmount > 0"
+        class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+      >
+        <p class="font-medium">Para separar tu cita pedimos {{ money(depositAmount) }}</p>
+        <p v-if="deposit?.instructions" class="mt-1 text-xs">{{ deposit.instructions }}</p>
+        <p class="mt-1 text-xs">
+          Te damos los datos al confirmar. Tu cita queda apartada cuando recibamos el abono, y se
+          descuenta de lo que pagues ese día.
+        </p>
+      </div>
 
       <p v-if="error" class="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
 
