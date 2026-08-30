@@ -63,6 +63,15 @@ export interface BookPayload {
   items?: Array<{ service_id: number; resource_id: number; starts_at: string }>
   /** De qué combo sale, para que el cobro aplique su descuento. */
   service_package_id?: number | null
+  /**
+   * Rehacer un trabajo que falló: vale 0 y no paga comisión.
+   *
+   * Se le anota a quien hizo el ORIGINAL, no a quien lo rehace: el sentido de
+   * llevar la cuenta es saber quién está recibiendo garantías.
+   */
+  is_warranty?: boolean
+  warranty_for_resource_id?: number | null
+  warranty_note?: string | null
   client_id?: number | null
   client_name?: string
   client_phone?: string

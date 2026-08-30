@@ -93,6 +93,12 @@ const router = createRouter({
       meta: { permission: 'negocio.configurar', feature: 'online_booking' },
     },
     {
+      path: '/configuracion/campanas',
+      name: 'campaigns',
+      component: () => import('@/modules/settings/views/CampaignsView.vue'),
+      meta: { permission: 'servicios.gestionar', feature: 'promotions' },
+    },
+    {
       path: '/configuracion/fidelizacion',
       name: 'loyalty',
       component: () => import('@/modules/settings/views/LoyaltyView.vue'),

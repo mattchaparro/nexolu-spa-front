@@ -70,6 +70,18 @@ const results = ref<ClientOption[]>([])
 const selected = ref<ClientOption | null>(null)
 const phone = ref('')
 const notes = ref('')
+
+/*
+|------------------------------------------------------------------------------
+| Garantía
+|------------------------------------------------------------------------------
+| Rehacer un trabajo que falló. Vale 0 y no paga comisión, y se le anota a
+| quien hizo el ORIGINAL -- no a quien lo rehace. Ese es todo el punto de
+| llevar la cuenta: saber quién está recibiendo garantías.
+*/
+const esGarantia = ref(false)
+const garantiaDe = ref<number | null>(null)
+const garantiaNota = ref('')
 const error = ref<string | null>(null)
 const conflict = ref(false)
 
@@ -164,6 +176,9 @@ watch(open, (isOpen) => {
   selected.value = null
   phone.value = ''
   notes.value = ''
+  esGarantia.value = false
+  garantiaDe.value = null
+  garantiaNota.value = ''
   error.value = null
   conflict.value = false
 })
@@ -213,6 +228,10 @@ const isChain = computed(() => mode.value !== 'one' && picking.value)
 const canSubmit = computed(() => {
   if (term.value.trim().length < 2 || isPending.value) return false
 
+  // Sin decir de quién es, la garantía no sirve para nada: es un servicio
+  // gratis del que nadie responde. El backend también lo rechaza.
+  if (esGarantia.value && garantiaDe.value === null) return false
+
   return isChain.value
     ? chosenChain.value !== null
     : serviceId.value !== null && chosenTime.value !== null && chosenResourceId.value !== null
@@ -227,6 +246,9 @@ async function submit(): Promise<void> {
     client_name: selected.value?.full_name ?? term.value.trim(),
     client_phone: selected.value ? undefined : phone.value.trim() || undefined,
     notes: notes.value.trim() || undefined,
+    is_warranty: esGarantia.value || undefined,
+    warranty_for_resource_id: esGarantia.value ? garantiaDe.value : undefined,
+    warranty_note: esGarantia.value ? (garantiaNota.value.trim() || undefined) : undefined,
   }
 
   try {
@@ -577,6 +599,44 @@ async function submit(): Promise<void> {
         />
 
         <NxInput v-model="notes" label="Nota (opcional)" :disabled="isPending" />
+
+        <!-- Garantía. Sólo en un servicio suelto: rehacer una visita entera de
+             varios servicios es raro y complicaría el formulario para todos. -->
+        <div v-if="!isChain" class="rounded-md border border-slate-200 px-3 py-2">
+          <label class="flex items-start gap-2 text-sm text-slate-700">
+            <input
+              v-model="esGarantia"
+              type="checkbox"
+              class="mt-0.5"
+              :disabled="isPending"
+            />
+            <span>
+              Es una garantía
+              <span class="block text-xs text-slate-500">
+                No se le cobra al cliente y no paga comisión. Se le anota a quien hizo el trabajo
+                original.
+              </span>
+            </span>
+          </label>
+
+          <div v-if="esGarantia" class="mt-3 flex flex-col gap-3">
+            <NxSelect
+              v-model="garantiaDe"
+              :options="staff"
+              option-label="name"
+              option-value="id"
+              label="¿De quién es el trabajo que falló?"
+              :disabled="isPending"
+            />
+            <!-- Distinguir "se corrió el esmalte" de "trabajo mal hecho" decide
+                 si la conversación es una multa o una capacitación. -->
+            <NxInput
+              v-model="garantiaNota"
+              label="¿Qué pasó?"
+              :disabled="isPending"
+            />
+          </div>
+        </div>
 
         <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
       </template>

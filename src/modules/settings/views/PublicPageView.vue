@@ -31,6 +31,7 @@ const form = ref<Record<string, string>>({
   instagram: '',
   whatsapp: '',
   maps_url: '',
+  google_review_url: '',
 })
 const cover = ref<File | null>(null)
 const offered = ref<Set<number>>(new Set())
@@ -203,6 +204,24 @@ async function copyLink(): Promise<void> {
               />
               <span class="mt-1 block text-xs text-slate-500">
                 Hace que tu dirección sea tocable y abra el mapa.
+              </span>
+            </label>
+
+            <label class="text-sm text-slate-700">
+              {{ data.labels.google_review_url }}
+              <input
+                v-model="form.google_review_url"
+                class="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-slate-800"
+                placeholder="https://g.page/r/…/review"
+                :disabled="saving"
+              />
+              <!-- Se le ofrece a TODO el que responde la encuesta, no solo a
+                   quien calificó bien: filtrar por nota es "review gating" y
+                   Google lo prohíbe. -->
+              <span class="mt-1 block text-xs text-slate-500">
+                Al terminar la encuesta se le ofrece a todo el que responde. No se filtra por
+                nota: pedir reseñas sólo a los contentos va contra las políticas de Google y
+                puede costarte la ficha del negocio.
               </span>
             </label>
 

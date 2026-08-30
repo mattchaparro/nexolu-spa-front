@@ -57,6 +57,33 @@ export interface PayrollPreview {
   topped_up: number
   items: PreviewItem[]
   adjustments: PreviewAdjustment[]
+
+  /**
+   * Las garantías que RECIBIÓ y cómo la calificaron, juntas.
+   *
+   * Responden la misma pregunta desde dos lados: cuántas veces hubo que
+   * rehacer su trabajo, y qué opinaron los que sí quedaron conformes. Mirar
+   * una sin la otra lleva a conclusiones injustas en las dos direcciones.
+   */
+  warranties: {
+    count: number
+    items: Array<{
+      appointment_item_id: number
+      date: string
+      service_name: string | null
+      client_name: string | null
+      /** Puede no ser la misma persona: la garantía es de quien hizo el original. */
+      done_by: string | null
+      note: string | null
+    }>
+  }
+  ratings: {
+    count: number
+    staff_average: number | null
+    service_average: number | null
+    punctuality_average: number | null
+    comments: Array<{ comment: string; staff_rating: number | null; date: string | null }>
+  }
 }
 
 export interface AdjustmentCategory {

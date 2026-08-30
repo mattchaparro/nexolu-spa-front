@@ -204,6 +204,60 @@ const previewMessage = computed(() =>
             </NxButton>
           </div>
 
+          <!-- Cómo trabajó en el período: garantías y calificaciones juntas.
+               Responden la misma pregunta desde dos lados -- cuántas veces
+               hubo que rehacer su trabajo, y qué opinaron los que sí quedaron
+               conformes. Mirar una sin la otra lleva a conclusiones injustas
+               en las dos direcciones. -->
+          <div
+            v-if="preview.warranties.count > 0 || preview.ratings.count > 0"
+            class="mt-5 rounded-lg border border-slate-200 bg-white p-4"
+          >
+            <h3 class="mb-3 text-sm font-medium text-slate-700">Cómo le fue en el período</h3>
+
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div v-if="preview.ratings.count > 0">
+                <p class="text-xs uppercase tracking-wide text-slate-400">Calificación</p>
+                <p class="mt-1 text-2xl font-semibold text-slate-800">
+                  {{ preview.ratings.staff_average ?? '—' }}
+                  <span class="text-sm font-normal text-slate-500">
+                    / 5 · {{ preview.ratings.count }} respuesta(s)
+                  </span>
+                </p>
+                <p
+                  v-for="(c, i) in preview.ratings.comments"
+                  :key="i"
+                  class="mt-1 text-xs text-slate-600"
+                >
+                  “{{ c.comment }}”
+                </p>
+              </div>
+
+              <div v-if="preview.warranties.count > 0">
+                <p class="text-xs uppercase tracking-wide text-slate-400">Garantías recibidas</p>
+                <p class="mt-1 text-2xl font-semibold text-amber-700">
+                  {{ preview.warranties.count }}
+                </p>
+                <p
+                  v-for="w in preview.warranties.items"
+                  :key="w.appointment_item_id"
+                  class="mt-1 text-xs text-slate-600"
+                >
+                  {{ w.date }} · {{ w.service_name }}
+                  <span v-if="w.done_by" class="text-slate-400">· la rehizo {{ w.done_by }}</span>
+                  <span v-if="w.note" class="block text-slate-500">{{ w.note }}</span>
+                </p>
+                <!-- No se descuenta solo: una multa automática por un número
+                     sin contexto convierte un esmalte corrido en un descuento
+                     de nómina, y eso se pelea. -->
+                <p class="mt-2 text-xs text-slate-500">
+                  No se descuentan solas. Si decides una multa, ponla como descuento acá abajo y
+                  queda registrada.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <!-- Anticipos, descuentos y bonos -->
           <AdjustmentsPanel
             :resource-id="preview.resource.id"
