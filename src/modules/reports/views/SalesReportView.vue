@@ -21,6 +21,10 @@ const filters = ref<SalesFilters>({
   to: today,
   resourceId: null,
   paymentMethodId: null,
+  // Sin sede: todas las que esta persona pueda ver. Un reporte no se cuadra
+  // contra un cajón, así que acá "todas" sí es una respuesta legítima -- y es
+  // la que el dueño de dos locales quiere por defecto.
+  locationId: null,
 })
 
 const { data, isFetching } = useSalesReport(filters)
@@ -52,9 +56,7 @@ function onManualDate(): void {
 const totals = computed(() => data.value?.totals ?? null)
 
 /** El más alto de la serie, para escalar las barras del día a día. */
-const maxDay = computed(() =>
-  Math.max(1, ...(data.value?.by_day ?? []).map((d) => d.charged)),
-)
+const maxDay = computed(() => Math.max(1, ...(data.value?.by_day ?? []).map((d) => d.charged)))
 
 function percent(rate: number | null): string {
   return rate === null ? '—' : `${Math.round(rate * 100)}%`
@@ -101,6 +103,22 @@ function dayLabel(iso: string): string {
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <NxDatePicker v-model="filters.from" label="Desde" @update:model-value="onManualDate" />
         <NxDatePicker v-model="filters.to" label="Hasta" @update:model-value="onManualDate" />
+
+        <!-- Sólo aparece con más de una sede, y sólo con las que esta persona
+             puede mirar: ofrecer una que el servidor va a rechazar es una
+             trampa con forma de función. -->
+        <label v-if="(data?.filters.locations ?? []).length > 1" class="text-sm text-slate-600">
+          Sede
+          <select
+            v-model="filters.locationId"
+            class="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-slate-800"
+          >
+            <option :value="null">Todas las sedes</option>
+            <option v-for="l in data?.filters.locations ?? []" :key="l.id" :value="l.id">
+              {{ l.name }}
+            </option>
+          </select>
+        </label>
 
         <label class="text-sm text-slate-600">
           Quién atendió
@@ -172,6 +190,29 @@ function dayLabel(iso: string): string {
         </article>
       </div>
 
+      <!-- Por sede. Sólo con más de una: con un local, una tarjeta suelta que
+           repite el total de arriba no dice nada. Va antes que "por persona"
+           porque con dos locales es la primera pregunta, no la segunda. -->
+      <section v-if="(data?.by_location ?? []).length > 1" class="mb-6">
+        <h2 class="mb-2 text-sm font-medium text-slate-700">Por sede</h2>
+
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <article
+            v-for="sede in data?.by_location ?? []"
+            :key="sede.location_id ?? sede.name"
+            class="rounded-lg border border-slate-200 bg-white p-4"
+          >
+            <p class="font-medium text-slate-800">{{ sede.name }}</p>
+            <p class="mt-1 text-lg font-semibold tabular-nums text-slate-900">
+              {{ money(sede.charged) }}
+            </p>
+            <p class="text-xs text-slate-500">
+              {{ sede.services }} servicio(s) · {{ money(sede.commission) }} en comisiones
+            </p>
+          </article>
+        </div>
+      </section>
+
       <div class="grid gap-6 lg:grid-cols-2">
         <!-- Por persona -->
         <section>
@@ -238,7 +279,10 @@ function dayLabel(iso: string): string {
               <span class="tabular-nums text-sm text-slate-800">{{ money(row.charged) }}</span>
             </div>
 
-            <p v-if="!data?.by_payment_method.length" class="px-3 py-6 text-center text-sm text-slate-500">
+            <p
+              v-if="!data?.by_payment_method.length"
+              class="px-3 py-6 text-center text-sm text-slate-500"
+            >
               Sin ventas en este rango.
             </p>
           </div>

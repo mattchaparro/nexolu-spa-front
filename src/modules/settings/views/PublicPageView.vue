@@ -46,9 +46,7 @@ watch(
       form.value[key] = payload.profile[key] ?? ''
     }
 
-    offered.value = new Set(
-      payload.services.filter((s) => s.is_bookable_online).map((s) => s.id),
-    )
+    offered.value = new Set(payload.services.filter((s) => s.is_bookable_online).map((s) => s.id))
   },
   { immediate: true },
 )
@@ -219,9 +217,9 @@ async function copyLink(): Promise<void> {
                    quien calificó bien: filtrar por nota es "review gating" y
                    Google lo prohíbe. -->
               <span class="mt-1 block text-xs text-slate-500">
-                Al terminar la encuesta se le ofrece a todo el que responde. No se filtra por
-                nota: pedir reseñas sólo a los contentos va contra las políticas de Google y
-                puede costarte la ficha del negocio.
+                Al terminar la encuesta se le ofrece a todo el que responde. No se filtra por nota:
+                pedir reseñas sólo a los contentos va contra las políticas de Google y puede
+                costarte la ficha del negocio.
               </span>
             </label>
 

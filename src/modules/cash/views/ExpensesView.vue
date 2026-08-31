@@ -3,6 +3,9 @@ import { computed, ref } from 'vue'
 
 import { usePaymentMethods } from '@/composables/usePaymentMethods'
 import { useSystemAlert } from '@/composables/useSystemAlert'
+import LocationPicker from '@/modules/settings/components/LocationPicker.vue'
+import { useLocations } from '@/modules/settings/composables/useLocations'
+import { useAuthStore } from '@/stores/auth.store'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxDatePicker, NxInput, NxModal, NxSelect } from '@/ui'
 
@@ -15,6 +18,7 @@ import {
 } from '../composables/useCash'
 import { useMoney } from '../composables/useMoney'
 
+const auth = useAuthStore()
 const { notify } = useSystemAlert()
 const { money } = useMoney()
 
@@ -22,7 +26,11 @@ const today = new Date().toISOString().slice(0, 10)
 const from = ref(today.slice(0, 8) + '01')
 const to = ref(today)
 
-const { data, isLoading } = useExpenses(from, to)
+// Sin `requerido`: acá se está mirando en qué se va la plata, no contando un
+// cajón. "Todas" es una respuesta legítima y es el default.
+const filtroSede = ref<number | null>(null)
+
+const { data, isLoading } = useExpenses(from, to, filtroSede)
 const { data: types } = useExpenseTypes()
 const { mutateAsync: save, isPending: saving } = useSaveExpense()
 const { mutateAsync: remove } = useDeleteExpense()
@@ -45,6 +53,32 @@ const value = ref('')
 const scope = ref('operacional')
 const typeId = ref<number | null>(null)
 const methodId = ref<number | null>(null)
+
+/**
+ * De qué local es el gasto.
+ *
+ * Nulo NO es "no lo llené": es "del negocio entero" -- la contadora, el
+ * dominio -- y un gasto así no lo paga ningún cajón, a propósito.
+ *
+ * Por eso el campo sólo se manda cuando hay más de una sede. Con un solo
+ * local, mandar nulo dejaría el gasto fuera del único cierre que existe: el
+ * día quedaría corto sin nada que lo explicara. Sin el campo, el servidor lo
+ * pone donde está quien lo registra, que es lo correcto.
+ */
+const expenseLocationId = ref<number | null>(null)
+
+const { data: locationsData } = useLocations()
+
+const sedes = computed(() => (locationsData.value?.locations ?? []).filter((l) => l.is_active))
+const variasSedes = computed(() => sedes.value.length > 1)
+
+/** Con varias sedes, un gasto nuevo arranca en la de quien lo registra. */
+const sedePorDefecto = computed(
+  () =>
+    sedes.value.find((l) => auth.user?.location_ids?.includes(l.id))?.id ??
+    sedes.value.find((l) => l.is_primary)?.id ??
+    null,
+)
 const receipt = ref<File | null>(null)
 const error = ref<string | null>(null)
 
@@ -56,6 +90,7 @@ function create(): void {
   scope.value = 'operacional'
   typeId.value = null
   methodId.value = methods.value?.[0]?.id ?? null
+  expenseLocationId.value = sedePorDefecto.value
   receipt.value = null
   error.value = null
   open.value = true
@@ -69,6 +104,7 @@ function edit(expense: ExpenseRow): void {
   scope.value = expense.scope
   typeId.value = expense.expense_type_id
   methodId.value = expense.payment_method_id
+  expenseLocationId.value = expense.location_id
   receipt.value = null
   error.value = null
   open.value = true
@@ -91,6 +127,9 @@ async function submit(): Promise<void> {
         scope: scope.value,
         expense_type_id: typeId.value,
         payment_method_id: methodId.value,
+        // Sólo con varias sedes: con una, omitirlo deja que el servidor la
+        // ponga, y mandar nulo sacaría el gasto del único cierre que hay.
+        ...(variasSedes.value ? { location_id: expenseLocationId.value } : {}),
       },
       receipt: receipt.value,
     })
@@ -117,6 +156,7 @@ async function destroy(expense: ExpenseRow): Promise<void> {
       </div>
 
       <div class="flex flex-wrap items-end gap-3">
+        <LocationPicker v-model="filtroSede" label="Sede" />
         <div class="w-40"><NxDatePicker v-model="from" label="Desde" /></div>
         <div class="w-40"><NxDatePicker v-model="to" label="Hasta" /></div>
         <NxButton @click="create">Nuevo gasto</NxButton>
@@ -150,13 +190,18 @@ async function destroy(expense: ExpenseRow): Promise<void> {
 
     <p v-if="isLoading" class="text-sm text-slate-500">Cargando…</p>
 
-    <p v-else-if="!data?.data.length" class="rounded-md bg-slate-100 px-4 py-6 text-sm text-slate-600">
+    <p
+      v-else-if="!data?.data.length"
+      class="rounded-md bg-slate-100 px-4 py-6 text-sm text-slate-600"
+    >
       Sin gastos en este rango.
     </p>
 
     <div v-else class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
       <table class="w-full min-w-[42rem] text-sm">
-        <thead class="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-400">
+        <thead
+          class="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-400"
+        >
           <tr>
             <th class="px-4 py-3 font-medium">Fecha</th>
             <th class="px-4 py-3 font-medium">Descripción</th>
@@ -171,7 +216,9 @@ async function destroy(expense: ExpenseRow): Promise<void> {
             <td class="px-4 py-3 tabular-nums text-slate-600">{{ expense.date }}</td>
             <td class="px-4 py-3 text-slate-800">
               {{ expense.description }}
-              <span v-if="expense.type" class="ml-1 text-xs text-slate-400">{{ expense.type }}</span>
+              <span v-if="expense.type" class="ml-1 text-xs text-slate-400">{{
+                expense.type
+              }}</span>
               <a
                 v-if="expense.receipt_url"
                 :href="expense.receipt_url"
@@ -197,7 +244,9 @@ async function destroy(expense: ExpenseRow): Promise<void> {
                 {{ expense.payment_method }}
               </span>
             </td>
-            <td class="px-4 py-3 text-right tabular-nums text-slate-800">{{ money(expense.value) }}</td>
+            <td class="px-4 py-3 text-right tabular-nums text-slate-800">
+              {{ money(expense.value) }}
+            </td>
             <td class="px-4 py-3 text-right">
               <NxButton variant="ghost" size="sm" @click="edit(expense)">Editar</NxButton>
               <NxButton variant="ghost" size="sm" @click="destroy(expense)">Eliminar</NxButton>
@@ -230,6 +279,25 @@ async function destroy(expense: ExpenseRow): Promise<void> {
           label="Alcance"
           :disabled="saving"
         />
+
+        <!-- De qué local es. "Todo el negocio" es una opción de verdad, no un
+             campo sin llenar: ese gasto no lo paga ningún cajón, a propósito.
+             Sólo aparece con más de una sede. -->
+        <label v-if="variasSedes" class="text-sm text-slate-700">
+          Sede
+          <select
+            v-model="expenseLocationId"
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900"
+            :disabled="saving"
+          >
+            <option v-for="l in sedes" :key="l.id" :value="l.id">{{ l.name }}</option>
+            <option :value="null">Todo el negocio</option>
+          </select>
+          <span class="mt-1 block text-xs text-slate-500">
+            Un gasto de "todo el negocio" — la contadora, el dominio — sale en los reportes pero no
+            descuadra la caja de ninguna sede.
+          </span>
+        </label>
 
         <div class="grid gap-3 sm:grid-cols-2">
           <NxSelect

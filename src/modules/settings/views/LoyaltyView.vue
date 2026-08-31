@@ -101,8 +101,9 @@ async function submit(): Promise<void> {
     })
     notify('Tarjeta guardada.', 'success')
   } catch (e) {
-    error.value = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-      ?? 'No pudimos guardar la tarjeta.'
+    error.value =
+      (e as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+      'No pudimos guardar la tarjeta.'
   }
 }
 
@@ -173,8 +174,8 @@ async function apagar(): Promise<void> {
               :disabled="isPending"
             />
             <span class="mt-1 block text-xs text-slate-500">
-              0 = toda visita cuenta. Sirve para que un retoque barato no llene la tarjeta igual
-              que un servicio completo.
+              0 = toda visita cuenta. Sirve para que un retoque barato no llene la tarjeta igual que
+              un servicio completo.
             </span>
           </label>
         </div>
@@ -215,7 +216,9 @@ async function apagar(): Promise<void> {
         <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
 
         <div class="flex items-center justify-between gap-2">
-          <NxButton v-if="program" variant="ghost" size="sm" @click="apagar">Apagar tarjeta</NxButton>
+          <NxButton v-if="program" variant="ghost" size="sm" @click="apagar"
+            >Apagar tarjeta</NxButton
+          >
           <span v-else />
           <NxButton :loading="isPending" :disabled="!canSubmit" @click="submit">Guardar</NxButton>
         </div>

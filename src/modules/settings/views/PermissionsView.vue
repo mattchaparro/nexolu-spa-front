@@ -15,6 +15,15 @@ interface TeamMember {
   is_active: boolean
   is_self: boolean
   is_admin: boolean
+  /** El dueño del negocio: ve todas las sedes y eso no se puede restringir. */
+  is_owner: boolean
+  /**
+   * Las sedes ASIGNADAS a mano, no las que termina viendo.
+   *
+   * Vacío no es "todas": es "la sede donde trabaja". La pantalla necesita la
+   * diferencia para poder decirlo, en vez de mostrar una marca que nadie puso.
+   */
+  location_ids: number[]
   resource_name: string | null
   role: string | null
   permissions: string[]
@@ -45,6 +54,7 @@ interface PermissionsPayload {
   users: TeamMember[]
   catalog: CatalogGroup[]
   roles: RoleOption[]
+  locations: Array<{ id: number; name: string }>
 }
 
 const auth = useAuthStore()
@@ -66,7 +76,9 @@ const selected = computed(() => team.value.find((u) => u.id === selectedId.value
 
 // El administrador tiene todo por su rol: la pantalla lo dice en vez de
 // mostrar veinte casillas marcadas que no se pueden tocar.
-const editable = computed(() => selected.value !== null && !selected.value.is_admin && !selected.value.is_self)
+const editable = computed(
+  () => selected.value !== null && !selected.value.is_admin && !selected.value.is_self,
+)
 
 /** Solo se ofrecen los permisos de funciones que el negocio tiene encendidas. */
 const catalog = computed<CatalogGroup[]>(() =>
@@ -121,10 +133,12 @@ const changed = computed(() => {
 
 const { mutateAsync: save, isPending } = useMutation({
   mutationFn: async () =>
-    (await httpClient.put(`/permissions/${selectedId.value}`, {
-      role: role.value,
-      permissions: [...granted.value],
-    })).data,
+    (
+      await httpClient.put(`/permissions/${selectedId.value}`, {
+        role: role.value,
+        permissions: [...granted.value],
+      })
+    ).data,
   onSuccess: () => {
     queryClient.invalidateQueries({ queryKey: ['permissions'] })
   },
@@ -144,6 +158,80 @@ async function submit(): Promise<void> {
 function roleLabel(name: string | null): string {
   return data.value?.roles.find((r) => r.name === name)?.label ?? '—'
 }
+
+/*
+|------------------------------------------------------------------------------
+| Sedes
+|------------------------------------------------------------------------------
+| Eje distinto de los permisos, y por eso se guarda aparte: QUÉ puede hacer y
+| DÓNDE son dos preguntas. A un administrador no se le editan permisos -- los
+| tiene todos por su rol -- pero sí se le acota el local, que es justo el caso
+| que las sedes vienen a resolver.
+*/
+const sedes = computed(() => data.value?.locations ?? [])
+const variasSedes = computed(() => sedes.value.length > 1)
+
+const asignadas = ref<Set<number>>(new Set())
+
+watch(
+  selected,
+  (user) => {
+    asignadas.value = new Set(user?.location_ids ?? [])
+  },
+  { immediate: true },
+)
+
+/** Al dueño no se le restringe: un negocio sin quién vea sus dos locales no se administra. */
+const editableSedes = computed(
+  () => selected.value !== null && !selected.value.is_owner && !selected.value.is_self,
+)
+
+const sedesCambiadas = computed(() => {
+  if (!selected.value) return false
+
+  const original = new Set(selected.value.location_ids)
+  if (original.size !== asignadas.value.size) return true
+
+  return [...asignadas.value].some((id) => !original.has(id))
+})
+
+function toggleSede(id: number): void {
+  const next = new Set(asignadas.value)
+
+  if (next.has(id)) {
+    next.delete(id)
+  } else {
+    next.add(id)
+  }
+
+  asignadas.value = next
+}
+
+const { mutateAsync: saveSedes, isPending: savingSedes } = useMutation({
+  mutationFn: async () =>
+    (
+      await httpClient.put(`/permissions/${selectedId.value}/locations`, {
+        location_ids: [...asignadas.value],
+      })
+    ).data,
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['permissions'] })
+    // Lo que ve esta persona cambió: la agenda y la caja se leen por sede.
+    queryClient.invalidateQueries({ queryKey: ['agenda'] })
+    queryClient.invalidateQueries({ queryKey: ['cash'] })
+  },
+})
+
+async function submitSedes(): Promise<void> {
+  error.value = null
+
+  try {
+    await saveSedes()
+    notify(`Sedes de ${selected.value?.name} actualizadas.`, 'success')
+  } catch (e) {
+    error.value = extractErrorMessage(e, 'No pudimos guardar las sedes.')
+  }
+}
 </script>
 
 <template>
@@ -160,7 +248,9 @@ function roleLabel(name: string | null): string {
 
     <div v-else class="grid gap-6 lg:grid-cols-[18rem_1fr]">
       <!-- El equipo -->
-      <aside class="divide-y divide-slate-100 self-start rounded-lg border border-slate-200 bg-white">
+      <aside
+        class="divide-y divide-slate-100 self-start rounded-lg border border-slate-200 bg-white"
+      >
         <button
           v-for="member in team"
           :key="member.id"
@@ -177,7 +267,9 @@ function roleLabel(name: string | null): string {
           </span>
           <span
             class="shrink-0 rounded px-2 py-0.5 text-xs"
-            :class="member.is_admin ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-600'"
+            :class="
+              member.is_admin ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-600'
+            "
           >
             {{ roleLabel(member.role) }}
           </span>
@@ -200,6 +292,53 @@ function roleLabel(name: string | null): string {
         >
           {{ selected.name }} es administradora y tiene todos los permisos por su rol, incluidos los
           que se agreguen más adelante. Para limitarla, cámbiale primero el rol.
+        </div>
+
+        <!-- Sedes. Eje aparte de los permisos y se guarda aparte: a una
+             administradora no se le editan permisos, pero sí el local. -->
+        <div v-if="variasSedes" class="mb-5 rounded-lg border border-slate-200 bg-white p-4">
+          <p class="mb-2 text-sm font-medium text-slate-800">Sedes que ve</p>
+
+          <p v-if="selected.is_owner" class="text-sm text-slate-600">
+            {{ selected.name }} es la dueña del negocio: ve todas las sedes, siempre. Eso no se
+            puede restringir — si nadie pudiera ver los dos locales, el negocio no podría
+            administrarse.
+          </p>
+
+          <template v-else>
+            <p class="mb-3 text-xs text-slate-500">
+              La agenda, la caja y los reportes se filtran por esto. Si no marcas ninguna, ve la
+              sede donde trabaja.
+            </p>
+
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="sede in sedes"
+                :key="sede.id"
+                type="button"
+                class="rounded-full border px-3 py-1 text-sm transition"
+                :class="
+                  asignadas.has(sede.id)
+                    ? 'border-slate-800 bg-slate-800 text-white'
+                    : 'border-slate-200 text-slate-700 hover:border-slate-400'
+                "
+                :disabled="!editableSedes || savingSedes"
+                @click="toggleSede(sede.id)"
+              >
+                {{ sede.name }}
+              </button>
+            </div>
+
+            <p v-if="!asignadas.size" class="mt-2 text-xs text-slate-500">
+              Sin marcar: verá sólo la sede donde atiende.
+            </p>
+
+            <div v-if="sedesCambiadas" class="mt-3">
+              <NxButton size="sm" :loading="savingSedes" @click="submitSedes">
+                Guardar sedes
+              </NxButton>
+            </div>
+          </template>
         </div>
 
         <!-- Rol -->
@@ -261,7 +400,9 @@ function roleLabel(name: string | null): string {
                     dato sensible
                   </span>
                 </span>
-                <span class="mt-0.5 block text-xs text-slate-500">{{ permission.description }}</span>
+                <span class="mt-0.5 block text-xs text-slate-500">{{
+                  permission.description
+                }}</span>
               </span>
             </label>
           </div>

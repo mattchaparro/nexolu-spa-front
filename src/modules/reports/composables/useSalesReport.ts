@@ -49,6 +49,19 @@ export interface SalesReport {
   from: string
   to: string
   totals: SalesTotals
+  /**
+   * Cuánto hizo cada local.
+   *
+   * La pregunta del dueño de dos locales no es "cuánto se hizo", es "cuál de
+   * los dos está jalando".
+   */
+  by_location: Array<{
+    location_id: number | null
+    name: string
+    services: number
+    charged: number
+    commission: number
+  }>
   by_person: SalesByPerson[]
   by_payment_method: SalesByMethod[]
   by_service: SalesByService[]
@@ -56,6 +69,7 @@ export interface SalesReport {
   filters: {
     resources: Array<{ id: number; name: string }>
     payment_methods: Array<{ id: number; name: string }>
+    locations: Array<{ id: number; name: string }>
   }
 }
 
@@ -64,6 +78,8 @@ export interface SalesFilters {
   to: string
   resourceId: number | null
   paymentMethodId: number | null
+  /** Null = todas las sedes que esta persona pueda ver. */
+  locationId: number | null
 }
 
 export function useSalesReport(filters: Ref<SalesFilters>) {
@@ -79,6 +95,7 @@ export function useSalesReport(filters: Ref<SalesFilters>) {
             ...(filters.value.paymentMethodId
               ? { payment_method_id: filters.value.paymentMethodId }
               : {}),
+            ...(filters.value.locationId ? { location_id: filters.value.locationId } : {}),
           },
         })
       ).data,

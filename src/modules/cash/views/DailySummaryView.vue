@@ -4,6 +4,8 @@ import { ref } from 'vue'
 import { useAuthStore } from '@/stores/auth.store'
 import { NxDatePicker } from '@/ui'
 
+import LocationPicker from '@/modules/settings/components/LocationPicker.vue'
+
 import { useDailySummary } from '../composables/useCash'
 import { useMoney } from '../composables/useMoney'
 
@@ -11,7 +13,15 @@ const auth = useAuthStore()
 const { money } = useMoney()
 
 const date = ref(new Date().toISOString().slice(0, 10))
-const { data, isLoading } = useDailySummary(date)
+
+/*
+ * Sin `requerido`: el resumen no se cuadra contra un cajón, responde "cómo nos
+ * fue hoy". Para el dueño de dos locales esa pregunta es de los dos, así que
+ * "todas" es el default correcto -- al revés que en el cierre.
+ */
+const locationId = ref<number | null>(null)
+
+const { data, isLoading } = useDailySummary(date, locationId)
 </script>
 
 <template>
@@ -21,8 +31,11 @@ const { data, isLoading } = useDailySummary(date)
         <h1 class="text-xl font-semibold text-slate-800">Resumen del día</h1>
         <p class="mt-1 text-sm text-slate-500">{{ auth.business?.name }}</p>
       </div>
-      <div class="w-44">
-        <NxDatePicker v-model="date" label="Día" />
+      <div class="flex flex-wrap items-end gap-3">
+        <LocationPicker v-model="locationId" label="Sede" />
+        <div class="w-44">
+          <NxDatePicker v-model="date" label="Día" />
+        </div>
       </div>
     </header>
 
@@ -35,9 +48,7 @@ const { data, isLoading } = useDailySummary(date)
         v-if="data.appointments.pending_checkout > 0"
         class="mb-6 rounded-md border-l-4 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900"
       >
-        <p class="font-medium">
-          {{ data.appointments.pending_checkout }} cita(s) sin cobrar
-        </p>
+        <p class="font-medium">{{ data.appointments.pending_checkout }} cita(s) sin cobrar</p>
         <p class="mt-0.5">
           <RouterLink :to="{ name: 'agenda' }" class="underline">Ir a la agenda</RouterLink>
         </p>
@@ -87,9 +98,7 @@ const { data, isLoading } = useDailySummary(date)
         <article class="rounded-lg border border-slate-200 bg-white p-4">
           <h2 class="mb-3 text-sm font-medium text-slate-700">Por persona</h2>
 
-          <p v-if="!data.by_resource.length" class="text-sm text-slate-500">
-            Sin citas este día.
-          </p>
+          <p v-if="!data.by_resource.length" class="text-sm text-slate-500">Sin citas este día.</p>
 
           <div v-else class="overflow-x-auto">
             <table class="w-full text-sm">
@@ -104,8 +113,12 @@ const { data, isLoading } = useDailySummary(date)
               <tbody class="divide-y divide-slate-50">
                 <tr v-for="row in data.by_resource" :key="row.name">
                   <td class="py-2 text-slate-800">{{ row.name }}</td>
-                  <td class="py-2 text-right tabular-nums text-slate-600">{{ row.appointments }}</td>
-                  <td class="py-2 text-right tabular-nums text-slate-600">{{ money(row.charged) }}</td>
+                  <td class="py-2 text-right tabular-nums text-slate-600">
+                    {{ row.appointments }}
+                  </td>
+                  <td class="py-2 text-right tabular-nums text-slate-600">
+                    {{ money(row.charged) }}
+                  </td>
                   <td class="py-2 text-right tabular-nums font-medium text-slate-800">
                     {{ money(row.commission) }}
                   </td>
@@ -129,7 +142,9 @@ const { data, isLoading } = useDailySummary(date)
           >
             <span class="text-slate-700">
               {{ row.label }}
-              <span v-if="!row.counts_as_cash" class="ml-1 text-xs text-slate-400">no es efectivo</span>
+              <span v-if="!row.counts_as_cash" class="ml-1 text-xs text-slate-400"
+                >no es efectivo</span
+              >
             </span>
             <span class="tabular-nums text-slate-800">{{ money(row.total) }}</span>
           </p>

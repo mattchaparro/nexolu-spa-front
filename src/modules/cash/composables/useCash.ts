@@ -40,6 +40,7 @@ export interface Shift {
 
 export interface ClosingPreview extends CashTotals {
   date: string
+  location_id: number | null
   already_closed: boolean
   pending_dates: string[]
 }
@@ -47,6 +48,8 @@ export interface ClosingPreview extends CashTotals {
 export interface Closing {
   id: number
   date: string
+  location_id: number | null
+  location_name: string | null
   total_charged: number
   total_cash: number
   total_expenses: number
@@ -81,6 +84,9 @@ export interface ExpenseRow {
   expense_type_id: number | null
   payment_method: string | null
   payment_method_id: number | null
+  location_id: number | null
+  /** Nulo = del negocio entero. No es un dato faltante, es una decisión. */
+  location_name: string | null
   receipt_url: string | null
 }
 
@@ -104,8 +110,13 @@ export function useOpenShift() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (payload: { opening_cash: number; note?: string }) =>
-      (await httpClient.post<Shift>('/cash/shift/open', payload)).data,
+    // `location_id` sólo hace falta cuando quien abre puede estar en varios
+    // cajones. Con una sede, o con una sola asignada, el servidor la deduce.
+    mutationFn: async (payload: {
+      opening_cash: number
+      note?: string
+      location_id?: number | null
+    }) => (await httpClient.post<Shift>('/cash/shift/open', payload)).data,
     onSuccess: () => invalidateCash(queryClient),
   })
 }
@@ -120,19 +131,41 @@ export function useCloseShift() {
   })
 }
 
-export function useClosingPreview(date: Ref<string>) {
+/**
+ * La vista previa del cierre, de UN cajón.
+ *
+ * Con dos sedes el servidor exige `location_id` -- incluso acá, en la vista
+ * previa: enseñar un cuadre que después no se va a poder confirmar es peor que
+ * preguntar antes. La consulta se desactiva mientras no haya sede elegida para
+ * no disparar un 422 predecible en cada render.
+ */
+export function useClosingPreview(date: Ref<string>, locationId: Ref<number | null>) {
   return useQuery({
-    queryKey: ['cash', 'closing-preview', date],
+    queryKey: ['cash', 'closing-preview', date, locationId],
+    // Un 422 "dinos en qué sede" es una respuesta legítima, no una falla de
+    // red: reintentarla sólo la repite.
+    retry: false,
     queryFn: async () =>
-      (await httpClient.get<ClosingPreview>('/cash/closing/preview', { params: { date: date.value } }))
-        .data,
+      (
+        await httpClient.get<ClosingPreview>('/cash/closing/preview', {
+          params: {
+            date: date.value,
+            ...(locationId.value ? { location_id: locationId.value } : {}),
+          },
+        })
+      ).data,
   })
 }
 
-export function useClosings() {
+export function useClosings(locationId?: Ref<number | null>) {
   return useQuery({
-    queryKey: ['cash', 'closings'],
-    queryFn: async () => (await httpClient.get<Closing[]>('/cash/closings')).data,
+    queryKey: ['cash', 'closings', locationId ?? null],
+    queryFn: async () =>
+      (
+        await httpClient.get<Closing[]>('/cash/closings', {
+          params: locationId?.value ? { location_id: locationId.value } : {},
+        })
+      ).data,
   })
 }
 
@@ -140,8 +173,12 @@ export function useCloseDay() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (payload: { date: string; actual_cash: number; note?: string }) =>
-      (await httpClient.post<Closing>('/cash/closing', payload)).data,
+    mutationFn: async (payload: {
+      date: string
+      actual_cash: number
+      note?: string
+      location_id?: number | null
+    }) => (await httpClient.post<Closing>('/cash/closing', payload)).data,
     onSuccess: () => invalidateCash(queryClient),
   })
 }
@@ -155,23 +192,41 @@ export function useUndoClosing() {
   })
 }
 
-export function useDailySummary(date: Ref<string>) {
+/**
+ * El resumen del día. Acá SÍ se puede mirar todo junto, a diferencia del
+ * cierre: no se cuadra contra un cajón, responde "cómo nos fue hoy", y para el
+ * dueño de dos locales esa pregunta es de los dos.
+ */
+export function useDailySummary(date: Ref<string>, locationId?: Ref<number | null>) {
   return useQuery({
-    queryKey: ['daily-summary', date],
+    queryKey: ['daily-summary', date, locationId ?? null],
     queryFn: async () =>
-      (await httpClient.get<DailySummary>('/daily-summary', { params: { date: date.value } })).data,
+      (
+        await httpClient.get<DailySummary>('/daily-summary', {
+          params: {
+            date: date.value,
+            ...(locationId?.value ? { location_id: locationId.value } : {}),
+          },
+        })
+      ).data,
   })
 }
 
-export function useExpenses(from: Ref<string>, to: Ref<string>) {
+export function useExpenses(from: Ref<string>, to: Ref<string>, locationId?: Ref<number | null>) {
   return useQuery({
-    queryKey: ['expenses', from, to],
+    queryKey: ['expenses', from, to, locationId ?? null],
     queryFn: async () =>
       (
         await httpClient.get<{
           data: ExpenseRow[]
           totals: { operacional: number; administrativo: number; total: number }
-        }>('/expenses', { params: { from: from.value, to: to.value } })
+        }>('/expenses', {
+          params: {
+            from: from.value,
+            to: to.value,
+            ...(locationId?.value ? { location_id: locationId.value } : {}),
+          },
+        })
       ).data,
   })
 }
@@ -200,9 +255,18 @@ export function useSaveExpense() {
     }) => {
       const form = new FormData()
 
+      /*
+       * `null` SÍ viaja, como cadena vacía; sólo se omite lo que no se mandó.
+       *
+       * Laravel convierte la cadena vacía en null antes de validar, así que el
+       * servidor puede distinguir "no me lo preguntaron" de "dijeron que no es
+       * de ningún local" -- que es justo lo que decide si un gasto entra en el
+       * cierre de una caja o en ninguna. Omitir los nulos borraba esa
+       * diferencia y volvía imposible marcar un gasto como del negocio entero.
+       */
       for (const [key, value] of Object.entries(payload)) {
-        if (value === null || value === undefined || value === '') continue
-        form.append(key, String(value))
+        if (value === undefined) continue
+        form.append(key, value === null ? '' : String(value))
       }
 
       if (receipt) form.append('receipt', receipt)

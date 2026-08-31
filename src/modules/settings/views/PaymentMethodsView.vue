@@ -24,9 +24,11 @@ const { data: catalog, isLoading } = useQuery({
 
 const { mutateAsync: sync, isPending } = useMutation({
   mutationFn: async (ids: number[]) =>
-    (await httpClient.put<CatalogRow[]>('/payment-methods/catalog', {
-      platform_payment_method_ids: ids,
-    })).data,
+    (
+      await httpClient.put<CatalogRow[]>('/payment-methods/catalog', {
+        platform_payment_method_ids: ids,
+      })
+    ).data,
   onSuccess: () => {
     queryClient.invalidateQueries({ queryKey: ['payment-methods'] })
     queryClient.invalidateQueries({ queryKey: ['cash'] })
@@ -83,11 +85,7 @@ async function save(): Promise<void> {
 
     <div v-else class="max-w-xl">
       <div class="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
-        <label
-          v-for="row in catalog ?? []"
-          :key="row.id"
-          class="flex items-center gap-3 px-4 py-3"
-        >
+        <label v-for="row in catalog ?? []" :key="row.id" class="flex items-center gap-3 px-4 py-3">
           <input
             type="checkbox"
             :checked="selected.has(row.id)"
@@ -100,7 +98,9 @@ async function save(): Promise<void> {
                descuadrar todos los cierres. -->
           <span
             class="rounded px-2 py-0.5 text-xs"
-            :class="row.counts_as_cash ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-500'"
+            :class="
+              row.counts_as_cash ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-500'
+            "
           >
             {{ row.counts_as_cash ? 'entra a la caja' : 'no es efectivo' }}
           </span>
@@ -111,7 +111,9 @@ async function save(): Promise<void> {
         Al quitar un medio deja de ofrecerse, pero los cobros anteriores lo conservan.
       </p>
 
-      <p v-if="error" class="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+      <p v-if="error" class="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+        {{ error }}
+      </p>
 
       <NxButton class="mt-4" :loading="isPending" :disabled="!changed" @click="save">
         Guardar cambios

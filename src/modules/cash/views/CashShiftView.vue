@@ -5,6 +5,8 @@ import { useSystemAlert } from '@/composables/useSystemAlert'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxInput } from '@/ui'
 
+import LocationPicker from '@/modules/settings/components/LocationPicker.vue'
+
 import { useCloseShift, useOpenShift, useShift } from '../composables/useCash'
 import { useMoney } from '../composables/useMoney'
 
@@ -15,6 +17,9 @@ const { data, isLoading } = useShift()
 const { mutateAsync: openShift, isPending: opening } = useOpenShift()
 const { mutateAsync: closeShift, isPending: closing } = useCloseShift()
 
+// En qué cajón se abre. `requerido`: un turno cuenta UN cajón, así que acá no
+// existe "todas". Con un solo local ni se muestra.
+const locationId = ref<number | null>(null)
 const openingCash = ref('')
 const countedCash = ref('')
 const note = ref('')
@@ -36,7 +41,11 @@ async function open(): Promise<void> {
   error.value = null
 
   try {
-    await openShift({ opening_cash: Number(openingCash.value || 0), note: note.value || undefined })
+    await openShift({
+      opening_cash: Number(openingCash.value || 0),
+      note: note.value || undefined,
+      location_id: locationId.value,
+    })
     openingCash.value = ''
     note.value = ''
     notify('Turno abierto.', 'success')
@@ -88,7 +97,14 @@ async function close(): Promise<void> {
       </p>
 
       <div class="flex flex-col gap-3">
-        <NxInput v-model="openingCash" label="Base inicial" inputmode="numeric" :disabled="opening" />
+        <!-- Un turno cuenta UN cajón: acá no existe "todas las sedes". -->
+        <LocationPicker v-model="locationId" requerido label="Sede" />
+        <NxInput
+          v-model="openingCash"
+          label="Base inicial"
+          inputmode="numeric"
+          :disabled="opening"
+        />
         <NxInput v-model="note" label="Nota (opcional)" :disabled="opening" />
 
         <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
@@ -148,7 +164,9 @@ async function close(): Promise<void> {
               {{ row.label }}
               <!-- Lo que no entra al cajón se marca: es la causa más común de
                    creer que falta plata cuando no falta. -->
-              <span v-if="!row.counts_as_cash" class="ml-1 text-xs text-slate-400">no es efectivo</span>
+              <span v-if="!row.counts_as_cash" class="ml-1 text-xs text-slate-400"
+                >no es efectivo</span
+              >
             </span>
             <span class="tabular-nums text-slate-800">{{ money(row.total) }}</span>
           </p>
@@ -160,7 +178,12 @@ async function close(): Promise<void> {
         <p class="mb-4 text-sm text-slate-500">Cuenta el efectivo que hay en el cajón ahora.</p>
 
         <div class="flex flex-col gap-3">
-          <NxInput v-model="countedCash" label="Efectivo contado" inputmode="numeric" :disabled="closing" />
+          <NxInput
+            v-model="countedCash"
+            label="Efectivo contado"
+            inputmode="numeric"
+            :disabled="closing"
+          />
 
           <div
             v-if="preview !== null"
@@ -175,7 +198,9 @@ async function close(): Promise<void> {
 
           <NxInput v-model="note" label="Nota (opcional)" :disabled="closing" />
 
-          <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+          <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+            {{ error }}
+          </p>
 
           <NxButton :loading="closing" :disabled="countedCash === ''" @click="close">
             Cerrar turno

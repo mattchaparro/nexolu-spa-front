@@ -97,9 +97,7 @@ function abrir(campaign: Campaign | null): void {
 function toggle(cual: 'services' | 'categories', id: number): void {
   const list = cual === 'services' ? serviceIds : categoryIds
 
-  list.value = list.value.includes(id)
-    ? list.value.filter((x) => x !== id)
-    : [...list.value, id]
+  list.value = list.value.includes(id) ? list.value.filter((x) => x !== id) : [...list.value, id]
 }
 
 const canSubmit = computed(() => {
@@ -131,8 +129,9 @@ async function submit(): Promise<void> {
     open.value = false
     notify('Campaña guardada.', 'success')
   } catch (e) {
-    error.value = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-      ?? 'No pudimos guardar la campaña.'
+    error.value =
+      (e as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+      'No pudimos guardar la campaña.'
   }
 }
 

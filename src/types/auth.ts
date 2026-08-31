@@ -45,6 +45,19 @@ export interface User {
   is_super_admin: boolean
   /** El recurso agendable que representa a este usuario, si presta servicios. */
   resource_id: number | null
+
+  /** El dueño del negocio: ve todas las sedes, siempre. */
+  is_owner: boolean
+
+  /**
+   * Las sedes que ve, ya resueltas por el servidor. `null` = todas.
+   *
+   * El front las usa para armar sus selectores; el servidor las vuelve a
+   * resolver en cada petición, porque una lista que viajó al navegador es una
+   * sugerencia, no una defensa.
+   */
+  location_ids: number[] | null
+
   roles: string[]
   permissions: string[]
 }

@@ -5,6 +5,8 @@ import { useSystemAlert } from '@/composables/useSystemAlert'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxDatePicker, NxInput } from '@/ui'
 
+import LocationPicker from '@/modules/settings/components/LocationPicker.vue'
+
 import { useCloseDay, useClosingPreview, useClosings, useUndoClosing } from '../composables/useCash'
 import { useMoney } from '../composables/useMoney'
 
@@ -12,12 +14,22 @@ const { notify } = useSystemAlert()
 const { money, signed } = useMoney()
 
 const date = ref(new Date().toISOString().slice(0, 10))
+
+/*
+ * En qué sede se está cerrando.
+ *
+ * Va `requerido`: un cierre se cuadra contra UN cajón. "Todas las sedes" no es
+ * una opción acá -- un cuadre que abarque dos no se puede confirmar contra
+ * ninguno -- así que el selector arranca en la principal en vez de en vacío.
+ * Con un solo local ni se muestra, y todo se comporta como antes.
+ */
+const locationId = ref<number | null>(null)
 const actualCash = ref('')
 const note = ref('')
 const error = ref<string | null>(null)
 
-const { data: preview, isLoading } = useClosingPreview(date)
-const { data: closings } = useClosings()
+const { data: preview, isLoading } = useClosingPreview(date, locationId)
+const { data: closings } = useClosings(locationId)
 const { mutateAsync: closeDay, isPending: closingDay } = useCloseDay()
 const { mutateAsync: undo } = useUndoClosing()
 
@@ -37,6 +49,7 @@ async function close(): Promise<void> {
       date: date.value,
       actual_cash: Number(actualCash.value || 0),
       note: note.value || undefined,
+      location_id: locationId.value,
     })
 
     actualCash.value = ''
@@ -74,8 +87,12 @@ async function undoClosing(id: number, day: string): Promise<void> {
         <h1 class="text-xl font-semibold text-slate-800">Cierre del día</h1>
         <p class="mt-1 text-sm text-slate-500">Todo el negocio, no solo tu turno.</p>
       </div>
-      <div class="w-44">
-        <NxDatePicker v-model="date" label="Día" />
+      <div class="flex flex-wrap items-end gap-3">
+        <!-- Cada local cuadra su propio cajón: acá no existe "todas". -->
+        <LocationPicker v-model="locationId" requerido label="Sede" />
+        <div class="w-44">
+          <NxDatePicker v-model="date" label="Día" />
+        </div>
       </div>
     </header>
 
@@ -159,7 +176,9 @@ async function undoClosing(id: number, day: string): Promise<void> {
             >
               <span class="text-slate-700">
                 {{ row.label }}
-                <span v-if="!row.counts_as_cash" class="ml-1 text-xs text-slate-400">no es efectivo</span>
+                <span v-if="!row.counts_as_cash" class="ml-1 text-xs text-slate-400"
+                  >no es efectivo</span
+                >
               </span>
               <span class="tabular-nums text-slate-800">{{ money(row.total) }}</span>
             </p>
@@ -189,10 +208,14 @@ async function undoClosing(id: number, day: string): Promise<void> {
               <div
                 v-if="difference !== null"
                 class="rounded-md px-3 py-2 text-sm"
-                :class="difference === 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'"
+                :class="
+                  difference === 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'
+                "
               >
                 <span v-if="difference === 0">Cuadra exacto.</span>
-                <span v-else>{{ difference > 0 ? 'Sobra' : 'Falta' }} {{ money(Math.abs(difference)) }}.</span>
+                <span v-else
+                  >{{ difference > 0 ? 'Sobra' : 'Falta' }} {{ money(Math.abs(difference)) }}.</span
+                >
               </div>
 
               <p class="text-xs text-slate-500">
@@ -201,7 +224,9 @@ async function undoClosing(id: number, day: string): Promise<void> {
 
               <NxInput v-model="note" label="Nota (opcional)" :disabled="closingDay" />
 
-              <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+              <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                {{ error }}
+              </p>
 
               <NxButton :loading="closingDay" :disabled="actualCash === ''" @click="close">
                 Cerrar día
@@ -217,7 +242,9 @@ async function undoClosing(id: number, day: string): Promise<void> {
 
       <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
         <table class="w-full min-w-[42rem] text-sm">
-          <thead class="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-400">
+          <thead
+            class="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-400"
+          >
             <tr>
               <th class="px-4 py-3 font-medium">Día</th>
               <th class="px-4 py-3 text-right font-medium">Cobrado</th>
