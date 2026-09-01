@@ -42,6 +42,18 @@ function reset(): void {
   error.value = null
 }
 
+/*
+ * Cerrar el formulario sin guardar.
+ *
+ * Función con nombre y no dos sentencias en el template: Prettier las parte en
+ * dos líneas sin punto y coma y el compilador de plantillas rechaza el archivo
+ * entero. Ya pasó tres veces en este repo.
+ */
+function cancelar(): void {
+  adding.value = false
+  reset()
+}
+
 async function submit(): Promise<void> {
   error.value = null
 
@@ -164,15 +176,7 @@ async function destroy(row: ResourceBreak): Promise<void> {
         <p v-if="error" class="rounded bg-red-50 px-2 py-1 text-xs text-red-700">{{ error }}</p>
 
         <div class="flex justify-end gap-2">
-          <NxButton
-            variant="secondary"
-            size="sm"
-            :disabled="saving"
-            @click="
-              adding = false
-              reset()
-            "
-          >
+          <NxButton variant="secondary" size="sm" :disabled="saving" @click="cancelar">
             Cancelar
           </NxButton>
           <NxButton size="sm" :loading="saving" @click="submit">Guardar</NxButton>

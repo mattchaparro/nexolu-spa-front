@@ -77,6 +77,24 @@ async function toggleActive(resource: TeamResource): Promise<void> {
   await save({ id: resource.id, payload: { is_active: activating } })
   notify(activating ? 'Reactivado.' : 'Desactivado.', 'success')
 }
+
+/*
+ * Cerrar el modal y avisar, en funciones con nombre.
+ *
+ * Dos sentencias en línea funcionan sólo mientras alguien las escriba con punto
+ * y coma: Prettier las parte en dos líneas, se los quita, y el compilador de
+ * plantillas de Vue rechaza el archivo entero. Esta pantalla estuvo rota así
+ * sin que nadie lo notara — el typecheck no compila plantillas.
+ */
+function onGuardado(): void {
+  formOpen.value = false
+  notify('Guardado.', 'success')
+}
+
+function onHorarioGuardado(): void {
+  schedulingFor.value = null
+  notify('Horario actualizado.', 'success')
+}
 </script>
 
 <template>
@@ -187,19 +205,13 @@ async function toggleActive(resource: TeamResource): Promise<void> {
       :cupo-lleno="cupoLleno"
       :limite-equipo="limiteEquipo"
       @close="formOpen = false"
-      @saved="
-        formOpen = false
-        notify('Guardado.', 'success')
-      "
+      @saved="onGuardado"
     />
 
     <ScheduleEditor
       :resource="schedulingFor"
       @close="schedulingFor = null"
-      @saved="
-        schedulingFor = null
-        notify('Horario actualizado.', 'success')
-      "
+      @saved="onHorarioGuardado"
     />
   </section>
 </template>

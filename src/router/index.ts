@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 import { useAuthStore } from '@/stores/auth.store'
 
@@ -8,225 +8,231 @@ import { useAuthStore } from '@/stores/auth.store'
  * Los modulos se van agregando por fase (ver el blueprint). Lo que ya esta
  * fijo es la forma: agenda como pantalla principal --es donde el negocio vive
  * todo el dia--, y la reserva publica fuera del layout autenticado.
+ *
+ * Exportadas aparte del router para poder recorrerlas en las pruebas: hay una
+ * que importa cada vista y comprueba que compile. Es lo que atrapa un error de
+ * PLANTILLA, que `vue-tsc --noEmit` no ve porque no compila plantillas.
  */
+export const routes: RouteRecordRaw[] = [
+  {
+    path: '/iniciar-sesion',
+    name: 'login',
+    component: () => import('@/modules/auth/views/LoginView.vue'),
+    meta: { public: true, layout: 'auth' },
+  },
+
+  // Reserva publica: sin sesion, por slug del negocio. Alcance minimo a
+  // proposito -- consultar y reservar, nada mas.
+  {
+    /*
+     * La sede va en la URL y es opcional.
+     *
+     * `/reservar/spa` lleva a la página del negocio, que pregunta a cuál
+     * local; `/reservar/spa/cedritos` entra derecho a ese local. Es el
+     * enlace que el negocio pega en el WhatsApp de cada sede, y el que hace
+     * que la clienta no tenga que elegir algo que ya sabía.
+     */
+    path: '/reservar/:businessSlug/:locationSlug?',
+    name: 'public-booking',
+    component: () => import('@/modules/publicBooking/views/PublicBookingView.vue'),
+    meta: { public: true, layout: 'blank' },
+  },
+  {
+    /*
+     * "Mis citas": ver, mover la hora y cancelar, sin cuenta.
+     *
+     * El token va en la URL porque llegó en el mensaje de WhatsApp del
+     * negocio. NO se entra por teléfono: un teléfono no es un secreto, y
+     * dejar consultar por él convertiría esto en un directorio de clientas.
+     */
+    path: '/mis-citas/:businessSlug/:token',
+    name: 'my-appointments',
+    component: () => import('@/modules/publicBooking/views/MyAppointmentsView.vue'),
+    meta: { public: true, layout: 'blank' },
+  },
+  {
+    // La encuesta llega por WhatsApp: sin sesión y con el token en la URL.
+    path: '/encuesta/:token',
+    name: 'survey',
+    component: () => import('@/modules/publicBooking/views/SurveyView.vue'),
+    meta: { public: true, layout: 'blank' },
+  },
+
+  {
+    path: '/',
+    redirect: { name: 'agenda' },
+  },
+  {
+    path: '/agenda',
+    name: 'agenda',
+    component: () => import('@/modules/agenda/views/AgendaView.vue'),
+    meta: { permission: 'citas.ver', feature: 'scheduling' },
+  },
+  {
+    path: '/clientes',
+    name: 'clients',
+    component: () => import('@/modules/clients/views/ClientListView.vue'),
+    meta: { permission: 'clientes.ver', feature: 'clients' },
+  },
+  {
+    path: '/clientes/:id',
+    name: 'client',
+    component: () => import('@/modules/clients/views/ClientDetailView.vue'),
+    // Ver la ficha completa exige mas que poder elegir a alguien en un
+    // buscador: aca esta su historial, cuanto gasta y sus fotos.
+    meta: { permission: 'clientes.historial', feature: 'clients' },
+  },
+  {
+    path: '/servicios',
+    name: 'services',
+    component: () => import('@/modules/catalog/views/ServiceListView.vue'),
+    meta: { permission: 'servicios.gestionar' },
+  },
+  {
+    path: '/equipo',
+    name: 'resources',
+    component: () => import('@/modules/catalog/views/ResourceListView.vue'),
+    meta: { permission: 'recursos.gestionar' },
+  },
+
+  {
+    path: '/mi-dia',
+    name: 'my-work',
+    component: () => import('@/modules/mywork/views/MyWorkView.vue'),
+    // Sin permiso propio: cualquiera que entre puede ver lo suyo. Si no es
+    // alguien que atiende, la pantalla se lo dice.
+    meta: {},
+  },
+  {
+    path: '/configuracion/medios-de-pago',
+    name: 'payment-methods',
+    component: () => import('@/modules/settings/views/PaymentMethodsView.vue'),
+    meta: { permission: 'negocio.configurar' },
+  },
+  {
+    path: '/configuracion/pagina-publica',
+    name: 'public-page',
+    component: () => import('@/modules/settings/views/PublicPageView.vue'),
+    meta: { permission: 'negocio.configurar', feature: 'online_booking' },
+  },
+  {
+    // Sin `feature: multi_location`: un negocio de un solo local también
+    // entra acá, para ponerle dirección y enlace de Maps a su sede. La
+    // bandera y el tope del plan deciden si puede abrir la SEGUNDA, y eso
+    // se defiende en el servidor.
+    path: '/configuracion/sedes',
+    name: 'locations',
+    component: () => import('@/modules/settings/views/LocationsView.vue'),
+    meta: { permission: 'negocio.configurar' },
+  },
+  {
+    path: '/configuracion/campanas',
+    name: 'campaigns',
+    component: () => import('@/modules/settings/views/CampaignsView.vue'),
+    meta: { permission: 'servicios.gestionar', feature: 'promotions' },
+  },
+  {
+    path: '/configuracion/fidelizacion',
+    name: 'loyalty',
+    component: () => import('@/modules/settings/views/LoyaltyView.vue'),
+    meta: { permission: 'servicios.gestionar', feature: 'loyalty' },
+  },
+  {
+    path: '/configuracion/permisos',
+    name: 'permissions',
+    component: () => import('@/modules/settings/views/PermissionsView.vue'),
+    meta: { permission: 'permisos.gestionar', feature: 'permissions_management' },
+  },
+  {
+    path: '/nomina',
+    name: 'payroll',
+    component: () => import('@/modules/payroll/views/PayrollView.vue'),
+    meta: { permission: 'nomina.gestionar', feature: 'payroll' },
+  },
+  {
+    path: '/configuracion/pagos-al-equipo',
+    name: 'compensation',
+    component: () => import('@/modules/payroll/views/CompensationView.vue'),
+    meta: { permission: 'nomina.gestionar', feature: 'payroll' },
+  },
+  {
+    path: '/ventas',
+    name: 'sales-report',
+    component: () => import('@/modules/reports/views/SalesReportView.vue'),
+    meta: { permission: 'reportes.ver', feature: 'reports' },
+  },
+  {
+    path: '/resumen',
+    name: 'daily-summary',
+    component: () => import('@/modules/cash/views/DailySummaryView.vue'),
+    meta: { permission: 'reportes.ver', feature: 'reports' },
+  },
+  {
+    path: '/caja',
+    name: 'cash-shift',
+    component: () => import('@/modules/cash/views/CashShiftView.vue'),
+    meta: { permission: 'caja.turno', feature: 'cash_shift' },
+  },
+  {
+    path: '/cierre',
+    name: 'daily-closing',
+    // Cerrar el negocio es distinto de manejar el turno propio: por eso
+    // exige su propio permiso y no basta con `caja.turno`.
+    component: () => import('@/modules/cash/views/DailyClosingView.vue'),
+    meta: { permission: 'caja.cierre', feature: 'cash_closing' },
+  },
+  {
+    path: '/gastos',
+    name: 'expenses',
+    component: () => import('@/modules/cash/views/ExpensesView.vue'),
+    meta: { permission: 'gastos.gestionar', feature: 'expenses' },
+  },
+
+  /*
+   * Plataforma. Layout propio y oscuro a propósito: confundir este panel
+   * con el de un negocio es como alguien termina cambiándole la
+   * configuración al spa equivocado.
+   */
+  {
+    path: '/superadmin',
+    redirect: { name: 'sa-dashboard' },
+  },
+  {
+    path: '/superadmin/resumen',
+    name: 'sa-dashboard',
+    component: () => import('@/modules/superadmin/views/PlatformDashboardView.vue'),
+    meta: { layout: 'superadmin', superadmin: true },
+  },
+  {
+    path: '/superadmin/negocios',
+    name: 'sa-businesses',
+    component: () => import('@/modules/superadmin/views/BusinessListView.vue'),
+    meta: { layout: 'superadmin', superadmin: true },
+  },
+  {
+    path: '/superadmin/flujos',
+    name: 'sa-workflows',
+    component: () => import('@/modules/superadmin/views/WorkflowListView.vue'),
+    meta: { layout: 'superadmin', superadmin: true },
+  },
+  {
+    path: '/superadmin/negocios/:id',
+    name: 'sa-business',
+    component: () => import('@/modules/superadmin/views/BusinessDetailView.vue'),
+    meta: { layout: 'superadmin', superadmin: true },
+  },
+
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'not-found',
+    component: () => import('@/modules/shared/views/NotFoundView.vue'),
+    meta: { public: true },
+  },
+]
+
 const router = createRouter({
   history: createWebHistory(),
-  routes: [
-    {
-      path: '/iniciar-sesion',
-      name: 'login',
-      component: () => import('@/modules/auth/views/LoginView.vue'),
-      meta: { public: true, layout: 'auth' },
-    },
-
-    // Reserva publica: sin sesion, por slug del negocio. Alcance minimo a
-    // proposito -- consultar y reservar, nada mas.
-    {
-      /*
-       * La sede va en la URL y es opcional.
-       *
-       * `/reservar/spa` lleva a la página del negocio, que pregunta a cuál
-       * local; `/reservar/spa/cedritos` entra derecho a ese local. Es el
-       * enlace que el negocio pega en el WhatsApp de cada sede, y el que hace
-       * que la clienta no tenga que elegir algo que ya sabía.
-       */
-      path: '/reservar/:businessSlug/:locationSlug?',
-      name: 'public-booking',
-      component: () => import('@/modules/publicBooking/views/PublicBookingView.vue'),
-      meta: { public: true, layout: 'blank' },
-    },
-    {
-      /*
-       * "Mis citas": ver, mover la hora y cancelar, sin cuenta.
-       *
-       * El token va en la URL porque llegó en el mensaje de WhatsApp del
-       * negocio. NO se entra por teléfono: un teléfono no es un secreto, y
-       * dejar consultar por él convertiría esto en un directorio de clientas.
-       */
-      path: '/mis-citas/:businessSlug/:token',
-      name: 'my-appointments',
-      component: () => import('@/modules/publicBooking/views/MyAppointmentsView.vue'),
-      meta: { public: true, layout: 'blank' },
-    },
-    {
-      // La encuesta llega por WhatsApp: sin sesión y con el token en la URL.
-      path: '/encuesta/:token',
-      name: 'survey',
-      component: () => import('@/modules/publicBooking/views/SurveyView.vue'),
-      meta: { public: true, layout: 'blank' },
-    },
-
-    {
-      path: '/',
-      redirect: { name: 'agenda' },
-    },
-    {
-      path: '/agenda',
-      name: 'agenda',
-      component: () => import('@/modules/agenda/views/AgendaView.vue'),
-      meta: { permission: 'citas.ver', feature: 'scheduling' },
-    },
-    {
-      path: '/clientes',
-      name: 'clients',
-      component: () => import('@/modules/clients/views/ClientListView.vue'),
-      meta: { permission: 'clientes.ver', feature: 'clients' },
-    },
-    {
-      path: '/clientes/:id',
-      name: 'client',
-      component: () => import('@/modules/clients/views/ClientDetailView.vue'),
-      // Ver la ficha completa exige mas que poder elegir a alguien en un
-      // buscador: aca esta su historial, cuanto gasta y sus fotos.
-      meta: { permission: 'clientes.historial', feature: 'clients' },
-    },
-    {
-      path: '/servicios',
-      name: 'services',
-      component: () => import('@/modules/catalog/views/ServiceListView.vue'),
-      meta: { permission: 'servicios.gestionar' },
-    },
-    {
-      path: '/equipo',
-      name: 'resources',
-      component: () => import('@/modules/catalog/views/ResourceListView.vue'),
-      meta: { permission: 'recursos.gestionar' },
-    },
-
-    {
-      path: '/mi-dia',
-      name: 'my-work',
-      component: () => import('@/modules/mywork/views/MyWorkView.vue'),
-      // Sin permiso propio: cualquiera que entre puede ver lo suyo. Si no es
-      // alguien que atiende, la pantalla se lo dice.
-      meta: {},
-    },
-    {
-      path: '/configuracion/medios-de-pago',
-      name: 'payment-methods',
-      component: () => import('@/modules/settings/views/PaymentMethodsView.vue'),
-      meta: { permission: 'negocio.configurar' },
-    },
-    {
-      path: '/configuracion/pagina-publica',
-      name: 'public-page',
-      component: () => import('@/modules/settings/views/PublicPageView.vue'),
-      meta: { permission: 'negocio.configurar', feature: 'online_booking' },
-    },
-    {
-      // Sin `feature: multi_location`: un negocio de un solo local también
-      // entra acá, para ponerle dirección y enlace de Maps a su sede. La
-      // bandera y el tope del plan deciden si puede abrir la SEGUNDA, y eso
-      // se defiende en el servidor.
-      path: '/configuracion/sedes',
-      name: 'locations',
-      component: () => import('@/modules/settings/views/LocationsView.vue'),
-      meta: { permission: 'negocio.configurar' },
-    },
-    {
-      path: '/configuracion/campanas',
-      name: 'campaigns',
-      component: () => import('@/modules/settings/views/CampaignsView.vue'),
-      meta: { permission: 'servicios.gestionar', feature: 'promotions' },
-    },
-    {
-      path: '/configuracion/fidelizacion',
-      name: 'loyalty',
-      component: () => import('@/modules/settings/views/LoyaltyView.vue'),
-      meta: { permission: 'servicios.gestionar', feature: 'loyalty' },
-    },
-    {
-      path: '/configuracion/permisos',
-      name: 'permissions',
-      component: () => import('@/modules/settings/views/PermissionsView.vue'),
-      meta: { permission: 'permisos.gestionar', feature: 'permissions_management' },
-    },
-    {
-      path: '/nomina',
-      name: 'payroll',
-      component: () => import('@/modules/payroll/views/PayrollView.vue'),
-      meta: { permission: 'nomina.gestionar', feature: 'payroll' },
-    },
-    {
-      path: '/configuracion/pagos-al-equipo',
-      name: 'compensation',
-      component: () => import('@/modules/payroll/views/CompensationView.vue'),
-      meta: { permission: 'nomina.gestionar', feature: 'payroll' },
-    },
-    {
-      path: '/ventas',
-      name: 'sales-report',
-      component: () => import('@/modules/reports/views/SalesReportView.vue'),
-      meta: { permission: 'reportes.ver', feature: 'reports' },
-    },
-    {
-      path: '/resumen',
-      name: 'daily-summary',
-      component: () => import('@/modules/cash/views/DailySummaryView.vue'),
-      meta: { permission: 'reportes.ver', feature: 'reports' },
-    },
-    {
-      path: '/caja',
-      name: 'cash-shift',
-      component: () => import('@/modules/cash/views/CashShiftView.vue'),
-      meta: { permission: 'caja.turno', feature: 'cash_shift' },
-    },
-    {
-      path: '/cierre',
-      name: 'daily-closing',
-      // Cerrar el negocio es distinto de manejar el turno propio: por eso
-      // exige su propio permiso y no basta con `caja.turno`.
-      component: () => import('@/modules/cash/views/DailyClosingView.vue'),
-      meta: { permission: 'caja.cierre', feature: 'cash_closing' },
-    },
-    {
-      path: '/gastos',
-      name: 'expenses',
-      component: () => import('@/modules/cash/views/ExpensesView.vue'),
-      meta: { permission: 'gastos.gestionar', feature: 'expenses' },
-    },
-
-    /*
-     * Plataforma. Layout propio y oscuro a propósito: confundir este panel
-     * con el de un negocio es como alguien termina cambiándole la
-     * configuración al spa equivocado.
-     */
-    {
-      path: '/superadmin',
-      redirect: { name: 'sa-dashboard' },
-    },
-    {
-      path: '/superadmin/resumen',
-      name: 'sa-dashboard',
-      component: () => import('@/modules/superadmin/views/PlatformDashboardView.vue'),
-      meta: { layout: 'superadmin', superadmin: true },
-    },
-    {
-      path: '/superadmin/negocios',
-      name: 'sa-businesses',
-      component: () => import('@/modules/superadmin/views/BusinessListView.vue'),
-      meta: { layout: 'superadmin', superadmin: true },
-    },
-    {
-      path: '/superadmin/flujos',
-      name: 'sa-workflows',
-      component: () => import('@/modules/superadmin/views/WorkflowListView.vue'),
-      meta: { layout: 'superadmin', superadmin: true },
-    },
-    {
-      path: '/superadmin/negocios/:id',
-      name: 'sa-business',
-      component: () => import('@/modules/superadmin/views/BusinessDetailView.vue'),
-      meta: { layout: 'superadmin', superadmin: true },
-    },
-
-    {
-      path: '/:pathMatch(.*)*',
-      name: 'not-found',
-      component: () => import('@/modules/shared/views/NotFoundView.vue'),
-      meta: { public: true },
-    },
-  ],
+  routes,
 })
 
 router.beforeEach(async (to) => {

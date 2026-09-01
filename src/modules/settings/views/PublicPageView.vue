@@ -104,7 +104,12 @@ const { mutateAsync: syncServices, isPending: syncing } = useMutation({
 
 function toggle(id: number): void {
   const next = new Set(offered.value)
-  next.has(id) ? next.delete(id) : next.add(id)
+  if (next.has(id)) {
+    next.delete(id)
+  } else {
+    next.add(id)
+  }
+
   offered.value = next
   void syncServices([...next])
 }

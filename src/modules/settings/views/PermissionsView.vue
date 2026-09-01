@@ -112,7 +112,12 @@ watch(
 
 function toggle(name: string): void {
   const next = new Set(granted.value)
-  next.has(name) ? next.delete(name) : next.add(name)
+  if (next.has(name)) {
+    next.delete(name)
+  } else {
+    next.add(name)
+  }
+
   granted.value = next
 }
 

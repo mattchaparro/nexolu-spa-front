@@ -170,6 +170,40 @@ export function useDeactivateService() {
   })
 }
 
+/**
+ * El multipart de un recurso.
+ *
+ * Exportada para poder probarla: acá ya se rompió dos veces, y las dos en
+ * silencio. `null` SÍ viaja, como cadena vacía; sólo se omite lo que no se
+ * mandó.
+ *
+ * Laravel convierte la cadena vacía en null antes de validar, y los campos que
+ * se pueden BORRAR están declarados `present`. Omitir los nulos hacía imposible
+ * quitarle a alguien su reseña o su porcentaje de comisión una vez puestos: el
+ * servidor los veía como "no me lo mandaste" y los dejaba igual, sin decir nada.
+ */
+export function resourceFormData(payload: Record<string, unknown>, photo?: File | null): FormData {
+  const form = new FormData()
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (value === undefined) {
+      continue
+    }
+
+    // Laravel lee "1"/"0" como booleano; "true"/"false" no.
+    form.append(
+      key,
+      typeof value === 'boolean' ? (value ? '1' : '0') : value === null ? '' : String(value),
+    )
+  }
+
+  if (photo) {
+    form.append('photo', photo)
+  }
+
+  return form
+}
+
 export function useSaveResource() {
   const queryClient = useQueryClient()
 
@@ -183,35 +217,8 @@ export function useSaveResource() {
       payload: Record<string, unknown>
       photo?: File | null
     }) => {
-      const form = new FormData()
-
-      /*
-       * `null` SÍ viaja, como cadena vacía; sólo se omite lo que no se mandó.
-       *
-       * Laravel convierte la cadena vacía en null antes de validar, y los
-       * campos que se pueden BORRAR están declarados `present`. Omitir los
-       * nulos hacía imposible quitarle a alguien su reseña o su porcentaje de
-       * comisión una vez puestos: el servidor los veía como "no me lo
-       * mandaste" y los dejaba igual, sin decir nada.
-       */
-      for (const [key, value] of Object.entries(payload)) {
-        if (value === undefined) {
-          continue
-        }
-
-        // Laravel lee "1"/"0" como booleano; "true"/"false" no.
-        form.append(
-          key,
-          typeof value === 'boolean' ? (value ? '1' : '0') : value === null ? '' : String(value),
-        )
-      }
-
-      if (photo) {
-        form.append('photo', photo)
-      }
-
       const url = id ? `/resources/${id}` : '/resources'
-      return (await httpClient.post<TeamResource>(url, form)).data
+      return (await httpClient.post<TeamResource>(url, resourceFormData(payload, photo))).data
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['resources'] })

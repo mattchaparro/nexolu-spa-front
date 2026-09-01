@@ -240,6 +240,31 @@ export function useExpenseTypes() {
   })
 }
 
+/**
+ * El multipart de un gasto.
+ *
+ * Exportada para poder probarla, porque acá el detalle decide plata: `null` SÍ
+ * viaja, como cadena vacía, y sólo se omite lo que no se mandó.
+ *
+ * Laravel convierte la cadena vacía en null antes de validar, así que el
+ * servidor puede distinguir "no me lo preguntaron" de "dijeron que no es de
+ * ningún local" — que es justo lo que decide si un gasto entra en el cierre de
+ * una caja o en ninguna. Omitir los nulos borraba esa diferencia y volvía
+ * imposible marcar un gasto como del negocio entero.
+ */
+export function expenseFormData(payload: Record<string, unknown>, receipt?: File | null): FormData {
+  const form = new FormData()
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (value === undefined) continue
+    form.append(key, value === null ? '' : String(value))
+  }
+
+  if (receipt) form.append('receipt', receipt)
+
+  return form
+}
+
 export function useSaveExpense() {
   const queryClient = useQueryClient()
 
@@ -253,25 +278,12 @@ export function useSaveExpense() {
       payload: Record<string, unknown>
       receipt?: File | null
     }) => {
-      const form = new FormData()
-
-      /*
-       * `null` SÍ viaja, como cadena vacía; sólo se omite lo que no se mandó.
-       *
-       * Laravel convierte la cadena vacía en null antes de validar, así que el
-       * servidor puede distinguir "no me lo preguntaron" de "dijeron que no es
-       * de ningún local" -- que es justo lo que decide si un gasto entra en el
-       * cierre de una caja o en ninguna. Omitir los nulos borraba esa
-       * diferencia y volvía imposible marcar un gasto como del negocio entero.
-       */
-      for (const [key, value] of Object.entries(payload)) {
-        if (value === undefined) continue
-        form.append(key, value === null ? '' : String(value))
-      }
-
-      if (receipt) form.append('receipt', receipt)
-
-      return (await httpClient.post(id ? `/expenses/${id}` : '/expenses', form)).data
+      return (
+        await httpClient.post(
+          id ? `/expenses/${id}` : '/expenses',
+          expenseFormData(payload, receipt),
+        )
+      ).data
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] })
