@@ -21,7 +21,16 @@ const locationSlug = computed(() =>
   route.params.locationSlug ? String(route.params.locationSlug) : null,
 )
 
-const { data: page, isLoading, isError } = usePublicPage(slug, locationSlug)
+/*
+ * El token del cliente, si el enlace lo trae: `?c=<token>`.
+ *
+ * Es lo que hace que el formulario llegue con su nombre y su teléfono puestos.
+ * El navegador no conoce esos datos — el negocio sí, porque ya estaban en la
+ * ficha, y el token dice de quién es.
+ */
+const clientToken = computed(() => (route.query.c ? String(route.query.c) : null))
+
+const { data: page, isLoading, isError } = usePublicPage(slug, locationSlug, clientToken)
 
 const sedes = computed(() => page.value?.locations ?? [])
 

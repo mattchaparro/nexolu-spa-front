@@ -74,6 +74,30 @@ const chosenChain = ref<PublicChainSlot | null>(null)
 const name = ref('')
 const phone = ref('')
 const email = ref('')
+
+/*
+ * Prellenar sus datos, si el enlace traía token.
+ *
+ * Es la única forma honesta de que "el enlace traiga su número": el navegador
+ * NO conoce el teléfono de quien lo abre y no hay forma de que lo conozca. Lo
+ * conoce el negocio, porque ya estaba en su ficha, y viaja porque el token
+ * dice de quién es esa ficha.
+ *
+ * Se hace `immediate` y sólo sobre campos vacíos: si la persona ya empezó a
+ * escribir, pisarle lo escrito cuando llega la respuesta es peor que no
+ * prellenar nada.
+ */
+watch(
+  () => props.page.client,
+  (ficha) => {
+    if (!ficha) return
+
+    if (!name.value) name.value = ficha.name ?? ''
+    if (!phone.value) phone.value = ficha.phone ?? ''
+    if (!email.value) email.value = ficha.email ?? ''
+  },
+  { immediate: true },
+)
 const notes = ref('')
 const error = ref<string | null>(null)
 const done = ref<BookingResult | null>(null)

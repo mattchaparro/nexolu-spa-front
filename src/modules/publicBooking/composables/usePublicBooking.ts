@@ -92,6 +92,15 @@ export interface PublicPage {
    */
   locations: PublicLocation[]
   location: PublicLocation | null
+
+  /**
+   * Con qué prellenar el formulario, si el enlace traía `?c=<token>`.
+   *
+   * Null cuando no hay token o no es válido. El navegador NO conoce el
+   * teléfono de quien lo abre: esto lo sabe el negocio porque ya estaba en la
+   * ficha, y viaja porque el token dice de quién es esa ficha.
+   */
+  client: { name: string; phone: string | null; email: string | null } | null
   services: PublicService[]
   packages: PublicPackage[]
   resources: PublicResource[]
@@ -165,16 +174,25 @@ function conSede(locationSlug?: Ref<string | null>): Record<string, string> {
   return locationSlug?.value ? { location: locationSlug.value } : {}
 }
 
-export function usePublicPage(slug: Ref<string>, locationSlug?: Ref<string | null>) {
+/** El token del cliente, si el enlace lo trae. Sólo la carga inicial lo usa. */
+function conCliente(clientToken?: Ref<string | null>): Record<string, string> {
+  return clientToken?.value ? { c: clientToken.value } : {}
+}
+
+export function usePublicPage(
+  slug: Ref<string>,
+  locationSlug?: Ref<string | null>,
+  clientToken?: Ref<string | null>,
+) {
   return useQuery({
-    queryKey: ['public', slug, locationSlug ?? null],
+    queryKey: ['public', slug, locationSlug ?? null, clientToken ?? null],
     // Es una página de marketing: no cambia entre un clic y el siguiente.
     staleTime: 5 * 60_000,
     retry: false,
     queryFn: async () =>
       (
         await httpClient.get<PublicPage>(`/public/${slug.value}`, {
-          params: conSede(locationSlug),
+          params: { ...conSede(locationSlug), ...conCliente(clientToken) },
         })
       ).data,
   })

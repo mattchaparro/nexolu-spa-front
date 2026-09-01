@@ -36,6 +36,19 @@ const router = createRouter({
       meta: { public: true, layout: 'blank' },
     },
     {
+      /*
+       * "Mis citas": ver, mover la hora y cancelar, sin cuenta.
+       *
+       * El token va en la URL porque llegó en el mensaje de WhatsApp del
+       * negocio. NO se entra por teléfono: un teléfono no es un secreto, y
+       * dejar consultar por él convertiría esto en un directorio de clientas.
+       */
+      path: '/mis-citas/:businessSlug/:token',
+      name: 'my-appointments',
+      component: () => import('@/modules/publicBooking/views/MyAppointmentsView.vue'),
+      meta: { public: true, layout: 'blank' },
+    },
+    {
       // La encuesta llega por WhatsApp: sin sesión y con el token en la URL.
       path: '/encuesta/:token',
       name: 'survey',
