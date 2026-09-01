@@ -46,6 +46,17 @@ const photo = ref<File | null>(null)
 const preview = ref<string | null>(null)
 const error = ref<string | null>(null)
 
+/** Una cita que impide trasladar a esa persona de sede. */
+interface Bloqueante {
+  appointment_id: number
+  date: string | null
+  time: string | null
+  client_name: string | null
+  service_name: string | null
+}
+
+const bloqueantes = ref<Bloqueante[]>([])
+
 const isEditing = computed(() => props.resource !== null)
 /** Sólo las personas llevan cuenta para entrar. Una cabina se ocupa, no entra. */
 const isPerson = computed(() => type.value === 'staff')
@@ -82,6 +93,7 @@ watch(
     photo.value = null
     preview.value = r?.photo_url ?? null
     error.value = null
+    bloqueantes.value = []
   },
 )
 
@@ -93,6 +105,7 @@ function onFile(event: Event): void {
 
 async function submit(): Promise<void> {
   error.value = null
+  bloqueantes.value = []
 
   // Vacío = sin porcentaje propio, que NO es lo mismo que 0. Se manda null
   // explícito para poder quitárselo a alguien que ya lo tenía.
@@ -133,6 +146,16 @@ async function submit(): Promise<void> {
     emit('saved')
   } catch (e) {
     error.value = extractErrorMessage(e, 'No pudimos guardar.')
+
+    /*
+     * Las citas que impiden el traslado, si el rechazo vino por eso.
+     *
+     * Un "no puedes" a secas obliga a ir a buscarlas a la agenda día por día,
+     * sin saber cuántas faltan. El servidor ya sabe cuáles son; mostrarlas es
+     * la diferencia entre un muro y una lista de pendientes.
+     */
+    bloqueantes.value =
+      (e as { response?: { data?: { blocking?: Bloqueante[] } } })?.response?.data?.blocking ?? []
   }
 }
 </script>
@@ -272,6 +295,18 @@ async function submit(): Promise<void> {
       </div>
 
       <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+
+      <!-- Las citas que impiden el traslado. Sin la lista hay que ir a
+           buscarlas a la agenda día por día, sin saber cuántas faltan. -->
+      <div v-if="bloqueantes.length" class="rounded-md border border-red-200 bg-red-50 px-3 py-2">
+        <p class="text-xs font-medium uppercase tracking-wide text-red-700">Citas pendientes</p>
+        <ul class="mt-1 space-y-0.5 text-sm text-red-900">
+          <li v-for="cita in bloqueantes" :key="cita.appointment_id">
+            {{ cita.date }} {{ cita.time }} · {{ cita.client_name ?? 'Sin nombre' }}
+            <span class="text-red-700">— {{ cita.service_name }}</span>
+          </li>
+        </ul>
+      </div>
 
       <div class="flex justify-end gap-2">
         <NxButton variant="secondary" :disabled="isPending" @click="emit('close')"

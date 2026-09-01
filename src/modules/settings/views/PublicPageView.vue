@@ -15,6 +15,13 @@ interface PublicPagePayload {
   logo_url: string | null
   cover_url: string | null
   services: Array<{ id: number; name: string; is_bookable_online: boolean }>
+  /**
+   * Las sedes, para armar el enlace de cada una.
+   *
+   * Viene vacío con un solo local: el enlace del negocio ya es el de esa
+   * sede, y dos enlaces al mismo sitio sólo generan la duda de cuál mandar.
+   */
+  locations: Array<{ id: number; slug: string; name: string; city: string | null }>
 }
 
 const { notify } = useSystemAlert()
@@ -97,9 +104,14 @@ async function submit(): Promise<void> {
   }
 }
 
-async function copyLink(): Promise<void> {
+/** El enlace de una sede concreta: es el que se pega en el WhatsApp de ese local. */
+function sedeUrl(sedeSlug: string): string {
+  return `${publicUrl.value}/${sedeSlug}`
+}
+
+async function copyLink(url?: string): Promise<void> {
   try {
-    await navigator.clipboard.writeText(publicUrl.value)
+    await navigator.clipboard.writeText(url ?? publicUrl.value)
     notify('Enlace copiado.', 'success')
   } catch {
     // Sin portapapeles (http sin TLS, permisos): el enlace está a la vista y
@@ -137,6 +149,35 @@ async function copyLink(): Promise<void> {
             >
               Ver cómo se ve
             </a>
+          </div>
+
+          <!-- El enlace de cada sede. Sin esto existe y nadie lo encuentra:
+               quien administra no tiene por qué deducir que a la URL se le
+               pega el slug del local. Sólo con más de una sede. -->
+          <div v-if="data.locations.length" class="mt-4 border-t border-indigo-200 pt-3">
+            <p class="text-xs uppercase tracking-wide text-indigo-500">Enlace de cada sede</p>
+            <p class="mt-1 text-xs text-indigo-800">
+              Este es el que va en el WhatsApp de cada local: entra derecho a esa sede y la clienta
+              no tiene que elegir algo que ya sabía.
+            </p>
+
+            <div
+              v-for="sede in data.locations"
+              :key="sede.id"
+              class="mt-2 flex flex-wrap items-center gap-2"
+            >
+              <span class="text-sm font-medium text-indigo-900">{{ sede.name }}</span>
+              <span class="break-all font-mono text-xs text-indigo-800">{{
+                sedeUrl(sede.slug)
+              }}</span>
+              <button
+                type="button"
+                class="rounded border border-indigo-300 px-2 py-0.5 text-xs text-indigo-800"
+                @click="copyLink(sedeUrl(sede.slug))"
+              >
+                Copiar
+              </button>
+            </div>
           </div>
         </div>
 
