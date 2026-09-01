@@ -23,6 +23,17 @@ const ITEMS: Array<NavItem & { permission?: string; onlyStaff?: boolean }> = [
     permission: 'citas.ver',
     featureKey: 'scheduling',
   },
+  /*
+   * Sin `featureKey`: mientras no haya WhatsApp conectado, esta pantalla ES la
+   * mensajería del negocio. Esconderla detrás de una bandera dejaría los avisos
+   * preparados donde nadie los ve, que es exactamente lo que pasaba antes.
+   */
+  {
+    label: 'Mensajes',
+    icon: 'pi pi-send',
+    routeName: 'outbox',
+    permission: 'citas.ver',
+  },
   {
     label: 'Clientes',
     icon: 'pi pi-users',

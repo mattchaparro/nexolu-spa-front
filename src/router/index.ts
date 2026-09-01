@@ -116,6 +116,19 @@ export const routes: RouteRecordRaw[] = [
     meta: { permission: 'negocio.configurar', feature: 'online_booking' },
   },
   {
+    /*
+     * La bandeja de salida.
+     *
+     * Con `citas.ver` y sin bandera de función: quien atiende el mostrador es
+     * quien manda estos mensajes mientras no haya WhatsApp conectado, y ya
+     * tiene ese permiso.
+     */
+    path: '/mensajes',
+    name: 'outbox',
+    component: () => import('@/modules/messages/views/OutboxView.vue'),
+    meta: { permission: 'citas.ver' },
+  },
+  {
     // Sin `feature: multi_location`: un negocio de un solo local también
     // entra acá, para ponerle dirección y enlace de Maps a su sede. La
     // bandera y el tope del plan deciden si puede abrir la SEGUNDA, y eso
