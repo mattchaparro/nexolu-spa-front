@@ -47,10 +47,21 @@ export function useServices() {
   })
 }
 
-export function useResources() {
+/**
+ * El equipo, opcionalmente de una sola sede.
+ *
+ * Es lo que hace que el modal de agendar y el de reagendar no ofrezcan a
+ * alguien del otro local: se agenda EN una sede, punto.
+ */
+export function useResources(locationId?: Ref<number | null>) {
   return useQuery({
-    queryKey: ['resources'],
-    queryFn: async () => (await httpClient.get<Resource[]>('/resources')).data,
+    queryKey: ['resources', locationId ?? null],
+    queryFn: async () =>
+      (
+        await httpClient.get<Resource[]>('/resources', {
+          params: locationId?.value ? { location_id: locationId.value } : {},
+        })
+      ).data,
     staleTime: 5 * 60_000,
   })
 }
@@ -61,13 +72,21 @@ export function useResources() {
  * La query se desactiva sin servicio elegido en vez de mandar una peticion
  * incompleta que el backend rechazaria con un 422.
  */
-export function useAvailability(serviceId: Ref<number | null>, date: Ref<string>) {
+export function useAvailability(
+  serviceId: Ref<number | null>,
+  date: Ref<string>,
+  locationId?: Ref<number | null>,
+) {
   return useQuery({
-    queryKey: ['availability', serviceId, date],
+    queryKey: ['availability', serviceId, date, locationId ?? null],
     enabled: computed(() => Boolean(serviceId.value && date.value)),
     queryFn: async () => {
       const { data } = await httpClient.get<AvailabilityResponse>('/availability', {
-        params: { service_id: serviceId.value, date: date.value },
+        params: {
+          service_id: serviceId.value,
+          date: date.value,
+          ...(locationId?.value ? { location_id: locationId.value } : {}),
+        },
       })
       return data
     },
@@ -134,12 +153,14 @@ export interface ChainResponse {
   date: string
   services: Array<{ id: number; name: string; duration_min: number; price: number }>
   total_minutes: number
-  package: ({ id: number; name: string } & {
-    list_total: number
-    discount: number
-    total: number
-    savings_percent: number
-  }) | null
+  package:
+    | ({ id: number; name: string } & {
+        list_total: number
+        discount: number
+        total: number
+        savings_percent: number
+      })
+    | null
   preferred_resource: { id: number; name: string } | null
   slots: ChainSlot[]
 }
@@ -156,11 +177,20 @@ export function useChainAvailability(
   packageId: Ref<number | null>,
   date: Ref<string>,
   preferredId?: Ref<number | null>,
+  locationId?: Ref<number | null>,
 ) {
   return useQuery({
-    queryKey: ['availability', 'chain', serviceIds, packageId, date, preferredId ?? null],
-    enabled: computed(() =>
-      Boolean(date.value) && (packageId.value !== null || serviceIds.value.length > 0),
+    queryKey: [
+      'availability',
+      'chain',
+      serviceIds,
+      packageId,
+      date,
+      preferredId ?? null,
+      locationId ?? null,
+    ],
+    enabled: computed(
+      () => Boolean(date.value) && (packageId.value !== null || serviceIds.value.length > 0),
     ),
     queryFn: async () => {
       const { data } = await httpClient.get<ChainResponse>('/availability/chain', {
@@ -170,6 +200,9 @@ export function useChainAvailability(
             : { 'service_ids[]': serviceIds.value }),
           date: date.value,
           ...(preferredId?.value ? { resource_id: preferredId.value } : {}),
+          // La sede sí es filtro, a diferencia de la persona preferida: toda
+          // la cadena ocurre en el mismo local.
+          ...(locationId?.value ? { location_id: locationId.value } : {}),
         },
       })
       return data

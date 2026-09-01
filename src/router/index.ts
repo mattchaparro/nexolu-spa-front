@@ -22,7 +22,15 @@ const router = createRouter({
     // Reserva publica: sin sesion, por slug del negocio. Alcance minimo a
     // proposito -- consultar y reservar, nada mas.
     {
-      path: '/reservar/:businessSlug',
+      /*
+       * La sede va en la URL y es opcional.
+       *
+       * `/reservar/spa` lleva a la página del negocio, que pregunta a cuál
+       * local; `/reservar/spa/cedritos` entra derecho a ese local. Es el
+       * enlace que el negocio pega en el WhatsApp de cada sede, y el que hace
+       * que la clienta no tenga que elegir algo que ya sabía.
+       */
+      path: '/reservar/:businessSlug/:locationSlug?',
       name: 'public-booking',
       component: () => import('@/modules/publicBooking/views/PublicBookingView.vue'),
       meta: { public: true, layout: 'blank' },

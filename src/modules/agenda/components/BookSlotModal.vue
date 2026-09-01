@@ -4,7 +4,11 @@ import { computed, ref, watch } from 'vue'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxDatePicker, NxInput, NxModal, NxSelect } from '@/ui'
 
-import { searchClients, useBookAppointment, type ClientOption } from '../composables/useAppointments'
+import {
+  searchClients,
+  useBookAppointment,
+  type ClientOption,
+} from '../composables/useAppointments'
 import {
   useAvailability,
   useChainAvailability,
@@ -36,6 +40,14 @@ const props = defineProps<{
   services: Service[]
   /** Servicio preseleccionado, normalmente el del filtro de la agenda. */
   defaultServiceId: number | null
+  /**
+   * La sede que se está mirando en la agenda.
+   *
+   * Se agenda EN una sede, igual que se cobra en una caja: el modal sólo
+   * ofrece a la gente de ese local y sólo sus horas. Null con un solo local,
+   * y entonces no filtra nada.
+   */
+  locationId?: number | null
 }>()
 
 const emit = defineEmits<{ close: []; booked: [] }>()
@@ -86,12 +98,19 @@ const error = ref<string | null>(null)
 const conflict = ref(false)
 
 const { mutateAsync, isPending } = useBookAppointment()
-const { data: availability, isFetching: loadingSlots } = useAvailability(serviceId, date)
+const locationId = computed(() => props.locationId ?? null)
+
+const { data: availability, isFetching: loadingSlots } = useAvailability(
+  serviceId,
+  date,
+  locationId,
+)
 const { data: chain, isFetching: loadingChain } = useChainAvailability(
   chainIds,
   packageId,
   date,
   preferredId,
+  locationId,
 )
 const { data: packagesData } = usePackages()
 
@@ -114,7 +133,7 @@ const available = computed(() =>
 const slots = computed(() => availability.value?.slots ?? [])
 const chainSlots = computed(() => chain.value?.slots ?? [])
 
-const { data: resourcesData } = useResources()
+const { data: resourcesData } = useResources(locationId)
 const staff = computed(() => (resourcesData.value ?? []).filter((r) => r.type === 'staff'))
 
 /** Por qué este tramo quedó con otra persona, dicho como se diría en el mostrador. */
@@ -248,7 +267,7 @@ async function submit(): Promise<void> {
     notes: notes.value.trim() || undefined,
     is_warranty: esGarantia.value || undefined,
     warranty_for_resource_id: esGarantia.value ? garantiaDe.value : undefined,
-    warranty_note: esGarantia.value ? (garantiaNota.value.trim() || undefined) : undefined,
+    warranty_note: esGarantia.value ? garantiaNota.value.trim() || undefined : undefined,
   }
 
   try {
@@ -294,11 +313,11 @@ async function submit(): Promise<void> {
            rejilla ya dijo persona y hora, y ahí una cadena no cabe. -->
       <div v-if="picking" class="flex gap-2">
         <button
-          v-for="option in ([
+          v-for="option in [
             { value: 'one', label: 'Un servicio' },
             { value: 'many', label: 'Varios' },
             { value: 'package', label: 'Combo' },
-          ] as Array<{ value: Mode; label: string }>)"
+          ] as Array<{ value: Mode; label: string }>"
           :key="option.value"
           type="button"
           class="flex-1 rounded-md border px-3 py-1.5 text-sm transition"
@@ -346,7 +365,10 @@ async function submit(): Promise<void> {
       <template v-else>
         <!-- Un servicio -->
         <template v-if="!isChain">
-          <p v-if="!available.length" class="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <p
+            v-if="!available.length"
+            class="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800"
+          >
             {{ pick.resourceName ?? 'Esta persona' }} no tiene servicios asignados todavía.
           </p>
 
@@ -368,7 +390,9 @@ async function submit(): Promise<void> {
             <span class="text-xs text-slate-400">· en el orden que los marques</span>
           </p>
 
-          <div class="max-h-40 divide-y divide-slate-50 overflow-y-auto rounded-md border border-slate-200">
+          <div
+            class="max-h-40 divide-y divide-slate-50 overflow-y-auto rounded-md border border-slate-200"
+          >
             <label
               v-for="item in services"
               :key="item.id"
@@ -398,7 +422,10 @@ async function submit(): Promise<void> {
 
         <!-- Combo -->
         <div v-else>
-          <p v-if="!packages.length" class="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-500">
+          <p
+            v-if="!packages.length"
+            class="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-500"
+          >
             Todavía no hay combos. Créalos en Servicios.
           </p>
 
@@ -490,7 +517,11 @@ async function submit(): Promise<void> {
                 v-if="!chainIds.length && !packageId"
                 class="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-500"
               >
-                {{ mode === 'package' ? 'Elige un combo para ver las horas.' : 'Marca los servicios para ver las horas.' }}
+                {{
+                  mode === 'package'
+                    ? 'Elige un combo para ver las horas.'
+                    : 'Marca los servicios para ver las horas.'
+                }}
               </p>
 
               <p
@@ -548,7 +579,8 @@ async function submit(): Promise<void> {
                   type="button"
                   class="rounded-md border px-2.5 py-1.5 text-sm transition"
                   :class="
-                    chosenTime && chosenResourceId === slot.resource_id &&
+                    chosenTime &&
+                    chosenResourceId === slot.resource_id &&
                     slot.starts_at.includes(chosenTime)
                       ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
                       : 'border-slate-200 text-slate-700 hover:border-slate-400'
@@ -604,12 +636,7 @@ async function submit(): Promise<void> {
              varios servicios es raro y complicaría el formulario para todos. -->
         <div v-if="!isChain" class="rounded-md border border-slate-200 px-3 py-2">
           <label class="flex items-start gap-2 text-sm text-slate-700">
-            <input
-              v-model="esGarantia"
-              type="checkbox"
-              class="mt-0.5"
-              :disabled="isPending"
-            />
+            <input v-model="esGarantia" type="checkbox" class="mt-0.5" :disabled="isPending" />
             <span>
               Es una garantía
               <span class="block text-xs text-slate-500">
@@ -630,11 +657,7 @@ async function submit(): Promise<void> {
             />
             <!-- Distinguir "se corrió el esmalte" de "trabajo mal hecho" decide
                  si la conversación es una multa o una capacitación. -->
-            <NxInput
-              v-model="garantiaNota"
-              label="¿Qué pasó?"
-              :disabled="isPending"
-            />
+            <NxInput v-model="garantiaNota" label="¿Qué pasó?" :disabled="isPending" />
           </div>
         </div>
 

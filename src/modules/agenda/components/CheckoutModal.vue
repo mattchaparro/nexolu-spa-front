@@ -266,7 +266,10 @@ async function submit(): Promise<void> {
 
         <template v-else>
           <p class="font-medium text-amber-900">
-            Tiene {{ premiosDisponibles.length === 1 ? 'un premio' : `${premiosDisponibles.length} premios` }}
+            Tiene
+            {{
+              premiosDisponibles.length === 1 ? 'un premio' : `${premiosDisponibles.length} premios`
+            }}
             sin usar
           </p>
           <div class="mt-2 flex flex-wrap gap-2">
@@ -318,7 +321,9 @@ async function submit(): Promise<void> {
           <p class="flex justify-between text-emerald-700">
             <span>Abonó</span><span class="tabular-nums">−{{ money(abonoRecibido) }}</span>
           </p>
-          <p class="mt-1 flex justify-between border-t border-slate-100 pt-1 font-semibold text-slate-900">
+          <p
+            class="mt-1 flex justify-between border-t border-slate-100 pt-1 font-semibold text-slate-900"
+          >
             <span>A cobrar ahora</span><span class="tabular-nums">{{ money(aCobrar) }}</span>
           </p>
         </template>
@@ -385,7 +390,9 @@ async function submit(): Promise<void> {
         <span v-else />
 
         <div class="flex gap-2">
-          <NxButton variant="secondary" :disabled="isPending" @click="emit('close')">Cerrar</NxButton>
+          <NxButton variant="secondary" :disabled="isPending" @click="emit('close')"
+            >Cerrar</NxButton
+          >
           <NxButton :loading="isPending" :disabled="!canSubmit" @click="submit">
             Cobrar {{ money(aCobrar) }}
           </NxButton>

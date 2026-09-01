@@ -27,6 +27,11 @@ const props = defineProps<{
 
 const slug = computed(() => props.slug)
 
+// La sede que ya eligió la clienta, si el negocio tiene varias. Viaja en cada
+// consulta: sin ella el calendario pinta días en los que sólo abre el otro
+// local, y las horas son de gente que atiende a media ciudad de distancia.
+const locationSlug = computed(() => props.page.location?.slug ?? null)
+
 /*
 |------------------------------------------------------------------------------
 | Reservar desde el navegador de WhatsApp
@@ -103,6 +108,8 @@ const { data: daysData, isFetching: loadingDays } = usePublicDays(
   daysServiceId,
   from,
   resourceId,
+  undefined,
+  locationSlug,
 )
 const { data: monthData, isFetching: loadingMonth } = usePublicDays(
   slug,
@@ -110,14 +117,22 @@ const { data: monthData, isFetching: loadingMonth } = usePublicDays(
   monthFrom,
   resourceId,
   MES_COMPLETO,
+  locationSlug,
 )
-const { data: slotsData, isFetching: loadingSlots } = usePublicSlots(slug, serviceId, date, resourceId)
+const { data: slotsData, isFetching: loadingSlots } = usePublicSlots(
+  slug,
+  serviceId,
+  date,
+  resourceId,
+  locationSlug,
+)
 const { data: chainData, isFetching: loadingChain } = usePublicChain(
   slug,
   packageId,
   date,
   resourceId,
   chainIds,
+  locationSlug,
 )
 const { mutateAsync: book, isPending: booking } = useCreatePublicBooking(slug)
 
@@ -659,7 +674,11 @@ const depositAmount = computed(() => {
         class="min-h-11 rounded-xl border border-dashed border-slate-300 px-3 py-2 text-left text-sm text-slate-600 active:bg-slate-50"
         @click="armando = !armando"
       >
-        {{ armando ? '← Prefiero un solo servicio' : '＋ ¿Te vas a hacer varias cosas? Arma tu visita' }}
+        {{
+          armando
+            ? '← Prefiero un solo servicio'
+            : '＋ ¿Te vas a hacer varias cosas? Arma tu visita'
+        }}
       </button>
 
       <button
@@ -736,7 +755,9 @@ const depositAmount = computed(() => {
         </span>
         <span class="min-w-0 flex-1">
           <span class="block font-medium text-slate-900">Quien esté disponible</span>
-          <span class="mt-0.5 block text-xs text-slate-500">Suele haber más horas para elegir.</span>
+          <span class="mt-0.5 block text-xs text-slate-500"
+            >Suele haber más horas para elegir.</span
+          >
         </span>
         <span class="shrink-0 text-slate-300">›</span>
       </button>
@@ -814,7 +835,9 @@ const depositAmount = computed(() => {
 
       <template v-if="date">
         <div>
-          <p class="mb-2 text-sm font-medium first-letter:uppercase text-slate-800">{{ dayLabel(date) }}</p>
+          <p class="mb-2 text-sm font-medium first-letter:uppercase text-slate-800">
+            {{ dayLabel(date) }}
+          </p>
 
           <p v-if="loadingHoras" class="text-sm text-slate-500">Cargando horas…</p>
 

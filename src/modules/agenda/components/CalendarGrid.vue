@@ -5,7 +5,14 @@ import type { GridAppointment, GridResource } from '../composables/useAgenda'
 import { toMinutes, toTime } from '../composables/useAgenda'
 
 const props = defineProps<{
-  columns: Array<{ key: string | number; label: string; sublabel?: string; color?: string | null; resource: GridResource; date: string }>
+  columns: Array<{
+    key: string | number
+    label: string
+    sublabel?: string
+    color?: string | null
+    resource: GridResource
+    date: string
+  }>
   dayStart: string
   dayEnd: string
   granularity: number
@@ -52,6 +59,17 @@ function windowStyle(window: { start: string; end: string }) {
 
 const dragging = ref<GridAppointment | null>(null)
 const hoverColumn = ref<string | number | null>(null)
+
+/**
+ * Soltar termina el arrastre, haya caído donde haya caído.
+ *
+ * Función con nombre y no dos sentencias en el template: Prettier las parte en
+ * dos líneas sin punto y coma y el compilador de plantillas las rechaza.
+ */
+function onDragEnd(): void {
+  dragging.value = null
+  hoverColumn.value = null
+}
 
 /** Minuto de la rejilla bajo el cursor, redondeado a la granularidad. */
 function minuteFromEvent(event: MouseEvent | DragEvent, element: HTMLElement): number {
@@ -200,14 +218,22 @@ function blockClass(appointment: GridAppointment): string {
             :key="appointment.item_id"
             :draggable="canEdit && !appointment.is_paid"
             class="absolute inset-x-1 overflow-hidden rounded border px-1.5 py-0.5 text-xs shadow-sm"
-            :class="[blockClass(appointment), canEdit && !appointment.is_paid ? 'cursor-grab' : 'cursor-pointer']"
-            :style="{ top: `${top(appointment.start)}px`, height: `${span(appointment.start, appointment.end)}px` }"
+            :class="[
+              blockClass(appointment),
+              canEdit && !appointment.is_paid ? 'cursor-grab' : 'cursor-pointer',
+            ]"
+            :style="{
+              top: `${top(appointment.start)}px`,
+              height: `${span(appointment.start, appointment.end)}px`,
+            }"
             @click.stop="emit('open', appointment)"
             @dragstart="dragging = appointment"
-            @dragend="dragging = null; hoverColumn = null"
+            @dragend="onDragEnd"
           >
             <p class="truncate font-medium">{{ appointment.client_name }}</p>
-            <p class="truncate opacity-75">{{ appointment.start }} · {{ appointment.service_name }}</p>
+            <p class="truncate opacity-75">
+              {{ appointment.start }} · {{ appointment.service_name }}
+            </p>
           </article>
         </div>
       </div>

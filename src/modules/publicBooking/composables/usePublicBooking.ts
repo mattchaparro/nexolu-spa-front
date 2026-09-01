@@ -47,6 +47,16 @@ export interface PublicPackage {
   services: Array<{ id: number; name: string; duration_min: number; price: number }>
 }
 
+export interface PublicLocation {
+  id: number
+  slug: string
+  name: string
+  address: string | null
+  city: string | null
+  phone?: string | null
+  maps_url: string | null
+}
+
 export interface PublicHours {
   weekday: number
   label: string
@@ -73,6 +83,15 @@ export interface PublicPage {
     whatsapp: string | null
     maps_url: string | null
   }
+  /**
+   * Las sedes del negocio, y cuál se está mirando.
+   *
+   * `locations` viene siempre, también con una sola: la pantalla decide con
+   * `length > 1` si muestra el paso, y no tiene que adivinar por la ausencia
+   * del campo. `location` es null cuando hay varias y todavía no se eligió.
+   */
+  locations: PublicLocation[]
+  location: PublicLocation | null
   services: PublicService[]
   packages: PublicPackage[]
   resources: PublicResource[]
@@ -134,13 +153,30 @@ export interface BookingResult {
   message: string
 }
 
-export function usePublicPage(slug: Ref<string>) {
+/*
+ * El slug de la sede viaja en TODAS las consultas.
+ *
+ * No es una comodidad: sin él, el calendario pinta días en los que sólo abre
+ * el otro local y las horas ofrecidas son de gente que atiende a media ciudad
+ * de distancia. La clienta descubriría el error un paso después, o peor, el
+ * día de la cita.
+ */
+function conSede(locationSlug?: Ref<string | null>): Record<string, string> {
+  return locationSlug?.value ? { location: locationSlug.value } : {}
+}
+
+export function usePublicPage(slug: Ref<string>, locationSlug?: Ref<string | null>) {
   return useQuery({
-    queryKey: ['public', slug],
+    queryKey: ['public', slug, locationSlug ?? null],
     // Es una página de marketing: no cambia entre un clic y el siguiente.
     staleTime: 5 * 60_000,
     retry: false,
-    queryFn: async () => (await httpClient.get<PublicPage>(`/public/${slug.value}`)).data,
+    queryFn: async () =>
+      (
+        await httpClient.get<PublicPage>(`/public/${slug.value}`, {
+          params: conSede(locationSlug),
+        })
+      ).data,
   })
 }
 
@@ -150,9 +186,19 @@ export function usePublicDays(
   from: Ref<string>,
   resourceId: Ref<number | null>,
   days?: Ref<number>,
+  locationSlug?: Ref<string | null>,
 ) {
   return useQuery({
-    queryKey: ['public', slug, 'days', serviceId, from, resourceId, days ?? 14],
+    queryKey: [
+      'public',
+      slug,
+      'days',
+      serviceId,
+      from,
+      resourceId,
+      days ?? 14,
+      locationSlug ?? null,
+    ],
     enabled: () => serviceId.value !== null,
     queryFn: async () =>
       (
@@ -164,6 +210,7 @@ export function usePublicDays(
               from: from.value,
               ...(days ? { days: days.value } : {}),
               ...(resourceId.value ? { resource_id: resourceId.value } : {}),
+              ...conSede(locationSlug),
             },
           },
         )
@@ -176,9 +223,10 @@ export function usePublicSlots(
   serviceId: Ref<number | null>,
   date: Ref<string | null>,
   resourceId: Ref<number | null>,
+  locationSlug?: Ref<string | null>,
 ) {
   return useQuery({
-    queryKey: ['public', slug, 'slots', serviceId, date, resourceId],
+    queryKey: ['public', slug, 'slots', serviceId, date, resourceId, locationSlug ?? null],
     enabled: () => serviceId.value !== null && date.value !== null,
     queryFn: async () =>
       (
@@ -187,6 +235,7 @@ export function usePublicSlots(
             service_id: serviceId.value,
             date: date.value,
             ...(resourceId.value ? { resource_id: resourceId.value } : {}),
+            ...conSede(locationSlug),
           },
         })
       ).data,
@@ -206,9 +255,19 @@ export function usePublicChain(
   date: Ref<string | null>,
   resourceId: Ref<number | null>,
   serviceIds?: Ref<number[]>,
+  locationSlug?: Ref<string | null>,
 ) {
   return useQuery({
-    queryKey: ['public', slug, 'chain', packageId, serviceIds ?? [], date, resourceId],
+    queryKey: [
+      'public',
+      slug,
+      'chain',
+      packageId,
+      serviceIds ?? [],
+      date,
+      resourceId,
+      locationSlug ?? null,
+    ],
     enabled: () =>
       date.value !== null && (packageId.value !== null || (serviceIds?.value.length ?? 0) > 0),
     queryFn: async () =>
@@ -224,6 +283,9 @@ export function usePublicChain(
                 : { 'service_ids[]': serviceIds?.value ?? [] }),
               date: date.value,
               ...(resourceId.value ? { resource_id: resourceId.value } : {}),
+              // La sede sí es filtro, a diferencia de la persona: nadie cruza
+              // la ciudad entre el manicure y el pedicure.
+              ...conSede(locationSlug),
             },
           },
         )
@@ -245,6 +307,7 @@ export function useCreatePublicBooking(slug: Ref<string>) {
       client_phone: string
       client_email: string
       notes?: string | null
-    }) => (await httpClient.post<BookingResult>(`/public/${slug.value}/appointments`, payload)).data,
+    }) =>
+      (await httpClient.post<BookingResult>(`/public/${slug.value}/appointments`, payload)).data,
   })
 }

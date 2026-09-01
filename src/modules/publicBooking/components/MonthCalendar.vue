@@ -29,8 +29,18 @@ const emit = defineEmits<{
 
 const DIAS = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
 const MESES = [
-  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+  'enero',
+  'febrero',
+  'marzo',
+  'abril',
+  'mayo',
+  'junio',
+  'julio',
+  'agosto',
+  'septiembre',
+  'octubre',
+  'noviembre',
+  'diciembre',
 ]
 
 /** El mes visible, siempre como su día 1. */

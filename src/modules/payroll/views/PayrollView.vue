@@ -7,6 +7,8 @@ import { usePaymentMethods } from '@/composables/usePaymentMethods'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxModal, NxSelect, NxTextarea } from '@/ui'
 
+import LocationPicker from '@/modules/settings/components/LocationPicker.vue'
+
 import AdjustmentsPanel from '../components/AdjustmentsPanel.vue'
 import {
   usePayrollPreview,
@@ -18,9 +20,17 @@ import {
 const { money, signed } = useMoney()
 const { notify } = useSystemAlert()
 
-const { data: pending, isLoading } = usePendingPayroll()
+// Sin `requerido`: la nómina no se cuadra contra un cajón. "Todas" es una
+// respuesta legítima y es la que quiere quien paga a todo el equipo.
+const locationId = ref<number | null>(null)
+
+const { data: pending, isLoading } = usePendingPayroll(locationId)
 const selectedId = ref<number | null>(null)
-const { data: preview, isLoading: loadingPreview, error: previewError } = usePayrollPreview(selectedId)
+const {
+  data: preview,
+  isLoading: loadingPreview,
+  error: previewError,
+} = usePayrollPreview(selectedId)
 const { data: paymentMethods } = usePaymentMethods()
 const { mutateAsync: settle, isPending: settling } = useSettlePayroll()
 
@@ -90,10 +100,12 @@ const previewMessage = computed(() =>
       <div>
         <h1 class="text-xl font-semibold text-slate-800">Nómina</h1>
         <p class="mt-1 max-w-2xl text-sm text-slate-500">
-          Lo que le debes a cada persona del equipo desde su última liquidación. El período arranca solo
-          donde terminó el anterior, así que no hay forma de pagar dos veces lo mismo.
+          Lo que le debes a cada persona del equipo desde su última liquidación. El período arranca
+          solo donde terminó el anterior, así que no hay forma de pagar dos veces lo mismo.
         </p>
       </div>
+
+      <LocationPicker v-model="locationId" label="Sede" />
 
       <div v-if="rows.length" class="text-right">
         <p class="text-xs uppercase tracking-wide text-slate-400">Total pendiente</p>
@@ -103,13 +115,18 @@ const previewMessage = computed(() =>
 
     <p v-if="isLoading" class="text-sm text-slate-500">Cargando…</p>
 
-    <p v-else-if="!rows.length" class="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500">
+    <p
+      v-else-if="!rows.length"
+      class="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500"
+    >
       No hay nada pendiente por liquidar.
     </p>
 
     <div v-else class="grid gap-6 lg:grid-cols-[20rem_1fr]">
       <!-- Quién tiene qué pendiente -->
-      <aside class="divide-y divide-slate-100 self-start rounded-lg border border-slate-200 bg-white">
+      <aside
+        class="divide-y divide-slate-100 self-start rounded-lg border border-slate-200 bg-white"
+      >
         <button
           v-for="row in rows"
           :key="row.resource_id"
@@ -194,9 +211,12 @@ const previewMessage = computed(() =>
               </div>
             </dl>
 
-            <p v-if="preview.net_total < 0" class="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-800">
-              Debe más de lo que produjo en este período. Si liquidas ahora queda en cero y no
-              sale plata; el saldo no se arrastra solo.
+            <p
+              v-if="preview.net_total < 0"
+              class="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-800"
+            >
+              Debe más de lo que produjo en este período. Si liquidas ahora queda en cero y no sale
+              plata; el saldo no se arrastra solo.
             </p>
 
             <NxButton class="mt-4" :disabled="settling" @click="openConfirm">
@@ -298,7 +318,11 @@ const previewMessage = computed(() =>
                       {{ money(item.charged) }}
                     </td>
                     <td class="px-4 py-2 text-right text-slate-500">
-                      {{ item.commission_rate === null ? '—' : `${Math.round(item.commission_rate * 100)}%` }}
+                      {{
+                        item.commission_rate === null
+                          ? '—'
+                          : `${Math.round(item.commission_rate * 100)}%`
+                      }}
                     </td>
                     <td class="whitespace-nowrap px-4 py-2 text-right font-medium text-slate-800">
                       {{ money(item.commission_amount) }}
@@ -313,13 +337,17 @@ const previewMessage = computed(() =>
     </div>
 
     <!-- Confirmar el pago -->
-    <NxModal :model-value="confirming" title="Liquidar y pagar" @update:model-value="confirming = $event">
+    <NxModal
+      :model-value="confirming"
+      title="Liquidar y pagar"
+      @update:model-value="confirming = $event"
+    >
       <div v-if="preview" class="space-y-4">
         <p class="text-sm text-slate-600">
           Le vas a pagar
           <span class="font-semibold text-slate-900">{{ money(preview.net_total) }}</span>
-          a {{ preview.resource.name }} por el período
-          {{ preview.period_start }} a {{ preview.period_end }}.
+          a {{ preview.resource.name }} por el período {{ preview.period_start }} a
+          {{ preview.period_end }}.
         </p>
 
         <p class="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">

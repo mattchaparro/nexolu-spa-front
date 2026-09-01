@@ -247,7 +247,15 @@ export function useMoveStage() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ id, stageId, status }: { id: number; stageId?: number | null; status?: string }) =>
+    mutationFn: async ({
+      id,
+      stageId,
+      status,
+    }: {
+      id: number
+      stageId?: number | null
+      status?: string
+    }) =>
       (
         await httpClient.post<{ actions: StageActionOutcome[] }>(`/appointments/${id}/stage`, {
           stage_id: stageId ?? null,

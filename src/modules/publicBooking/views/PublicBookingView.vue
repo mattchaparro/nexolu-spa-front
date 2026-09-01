@@ -1,14 +1,45 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import BookingFlow from '../components/BookingFlow.vue'
 import { usePublicPage } from '../composables/usePublicBooking'
 
 const route = useRoute()
+const router = useRouter()
+
 const slug = computed(() => String(route.params.businessSlug ?? ''))
 
-const { data: page, isLoading, isError } = usePublicPage(slug)
+/*
+ * La sede sale de la URL, no de un estado interno.
+ *
+ * Así el enlace que el negocio pega en el WhatsApp de Cedritos abre Cedritos,
+ * y el que la clienta comparte con una amiga abre el mismo local. Un selector
+ * que sólo viviera en memoria produciría enlaces que llevan a otra parte.
+ */
+const locationSlug = computed(() =>
+  route.params.locationSlug ? String(route.params.locationSlug) : null,
+)
+
+const { data: page, isLoading, isError } = usePublicPage(slug, locationSlug)
+
+const sedes = computed(() => page.value?.locations ?? [])
+
+/**
+ * Hay que preguntar a qué local va.
+ *
+ * Sólo con varias sedes y ninguna elegida. Con una sola el servidor la
+ * resuelve él y la pregunta nunca aparece: un paso con una sola respuesta es
+ * una pantalla de más entre la clienta y su cita.
+ */
+const debeElegirSede = computed(() => sedes.value.length > 1 && page.value?.location === null)
+
+function irASede(sedeSlug: string): void {
+  router.replace({
+    name: 'public-booking',
+    params: { businessSlug: slug.value, locationSlug: sedeSlug },
+  })
+}
 
 /** Servicio elegido desde la lista de arriba, para saltar directo al paso 2. */
 const preselected = ref<number | null>(null)
@@ -72,9 +103,7 @@ const groupedHours = computed(() => {
     <div v-else-if="isError || !page" class="flex min-h-screen items-center justify-center p-10">
       <div class="text-center">
         <p class="text-lg font-medium text-slate-800">Esta página no está disponible</p>
-        <p class="mt-2 text-sm text-slate-500">
-          Revisa el enlace o escríbele directo al negocio.
-        </p>
+        <p class="mt-2 text-sm text-slate-500">Revisa el enlace o escríbele directo al negocio.</p>
       </div>
     </div>
 
@@ -83,7 +112,11 @@ const groupedHours = computed(() => {
       <header class="relative">
         <div
           class="h-44 bg-slate-200 bg-cover bg-center sm:h-64"
-          :style="page.business.cover_url ? { backgroundImage: `url(${page.business.cover_url})` } : undefined"
+          :style="
+            page.business.cover_url
+              ? { backgroundImage: `url(${page.business.cover_url})` }
+              : undefined
+          "
         />
 
         <div class="mx-auto max-w-3xl px-5">
@@ -143,130 +176,179 @@ const groupedHours = computed(() => {
       </header>
 
       <main class="mx-auto max-w-3xl px-5 py-10">
-        <!-- Combos.
+        <!-- A qué local va.
+             Antes que nada: los servicios, el equipo y las horas de abajo ya
+             son los de la sede elegida, y enseñarlos sin haber preguntado
+             sería enseñar los de un local al azar. -->
+        <section v-if="debeElegirSede" class="mb-10">
+          <h2 class="mb-1 text-lg font-semibold text-slate-900">¿A cuál sede vas?</h2>
+          <p class="mb-4 text-sm text-slate-500">
+            Cada local tiene su propio equipo y su propio horario.
+          </p>
+
+          <div class="grid gap-3 sm:grid-cols-2">
+            <button
+              v-for="sede in sedes"
+              :key="sede.id"
+              type="button"
+              class="rounded-xl border border-slate-200 p-4 text-left transition hover:border-slate-500"
+              @click="irASede(sede.slug)"
+            >
+              <p class="font-medium text-slate-800">{{ sede.name }}</p>
+              <p v-if="sede.address || sede.city" class="mt-1 text-sm text-slate-500">
+                {{ [sede.address, sede.city].filter(Boolean).join(' · ') }}
+              </p>
+            </button>
+          </div>
+        </section>
+
+        <template v-else>
+          <!-- La sede en la que está, con salida.
+             Va arriba y no escondida: alguien que llegó por el enlace
+             equivocado tiene que poder darse cuenta ANTES de reservar, no el
+             día de la cita en la puerta del otro local. -->
+          <p
+            v-if="page.location && sedes.length > 1"
+            class="mb-6 flex flex-wrap items-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 text-sm text-slate-700"
+          >
+            <i class="pi pi-map-marker text-slate-400" />
+            Estás reservando en <b>{{ page.location.name }}</b>
+            <button
+              type="button"
+              class="ml-auto underline"
+              @click="router.replace({ name: 'public-booking', params: { businessSlug: slug } })"
+            >
+              Cambiar de sede
+            </button>
+          </p>
+
+          <!-- Combos.
              Van antes que los servicios sueltos: es lo que el negocio quiere
              vender y lo que sale mejor de precio. -->
-        <section v-if="page.packages?.length" class="mb-10">
-          <h2 class="mb-3 text-lg font-semibold text-slate-900">Combos</h2>
+          <section v-if="page.packages?.length" class="mb-10">
+            <h2 class="mb-3 text-lg font-semibold text-slate-900">Combos</h2>
 
-          <div class="divide-y divide-emerald-100 rounded-xl border border-emerald-200 bg-emerald-50/40">
-            <div v-for="combo in page.packages" :key="combo.id" class="flex items-center gap-4 p-4">
-              <img
-                v-if="combo.image_url"
-                :src="combo.image_url"
-                :alt="combo.name"
-                class="h-14 w-14 shrink-0 rounded-lg object-cover"
-              />
-              <div class="min-w-0 flex-1">
-                <p class="font-medium text-slate-800">{{ combo.name }}</p>
-                <p class="mt-0.5 text-sm text-slate-500">
-                  {{ combo.services.map((s) => s.name).join(' + ') }}
-                </p>
-                <p class="mt-1 text-sm text-slate-600">
-                  <b>{{ money(combo.total, page.business.currency) }}</b>
-                  <span v-if="combo.discount > 0" class="ml-1 text-slate-400 line-through">
-                    {{ money(combo.list_total, page.business.currency) }}
-                  </span>
-                  · {{ combo.total_minutes }} min
-                </p>
-              </div>
-              <button
-                type="button"
-                class="shrink-0 rounded-lg border border-emerald-400 bg-white px-3 py-1.5 text-sm text-emerald-800 transition hover:border-emerald-600"
-                @click="bookPackage(combo.id)"
-              >
-                Reservar
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <!-- Servicios -->
-        <section v-if="page.services.length" class="mb-10">
-          <h2 class="mb-3 text-lg font-semibold text-slate-900">Servicios</h2>
-
-          <div class="divide-y divide-slate-100 rounded-xl border border-slate-200">
             <div
-              v-for="item in page.services"
-              :key="item.id"
-              class="flex items-center gap-4 p-4"
+              class="divide-y divide-emerald-100 rounded-xl border border-emerald-200 bg-emerald-50/40"
             >
-              <img
-                v-if="item.image_url"
-                :src="item.image_url"
-                :alt="item.name"
-                class="h-14 w-14 shrink-0 rounded-lg object-cover"
-              />
-              <div class="min-w-0 flex-1">
-                <p class="font-medium text-slate-800">{{ item.name }}</p>
-                <p v-if="item.description" class="mt-0.5 text-sm text-slate-500">
-                  {{ item.description }}
-                </p>
-                <p class="mt-1 text-sm text-slate-600">
-                  {{ money(item.price, page.business.currency) }} · {{ item.duration_min }} min
-                </p>
-              </div>
-              <button
-                type="button"
-                class="shrink-0 rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 transition hover:border-slate-500"
-                @click="bookService(item.id)"
-              >
-                Reservar
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <!-- Reservar -->
-        <section ref="bookingRef" class="mb-10 scroll-mt-4">
-          <h2 class="mb-3 text-lg font-semibold text-slate-900">Reservar tu cita</h2>
-          <BookingFlow
-            :slug="slug"
-            :page="page"
-            :preselected="preselected"
-            :preselected-package="preselectedPackage"
-          />
-        </section>
-
-        <!-- Horario y equipo -->
-        <div class="grid gap-8 sm:grid-cols-2">
-          <section>
-            <h2 class="mb-3 text-lg font-semibold text-slate-900">Horario</h2>
-            <dl class="text-sm">
               <div
-                v-for="(group, i) in groupedHours"
-                :key="i"
-                class="flex justify-between border-b border-slate-100 py-1.5"
+                v-for="combo in page.packages"
+                :key="combo.id"
+                class="flex items-center gap-4 p-4"
               >
-                <dt class="text-slate-600">{{ group.label }}</dt>
-                <dd :class="group.hours === 'Cerrado' ? 'text-slate-400' : 'text-slate-800'">
-                  {{ group.hours }}
-                </dd>
-              </div>
-            </dl>
-          </section>
-
-          <section v-if="page.resources.length">
-            <h2 class="mb-3 text-lg font-semibold text-slate-900">Quiénes te atienden</h2>
-            <div class="flex flex-wrap gap-3">
-              <div v-for="person in page.resources" :key="person.id" class="text-center">
                 <img
-                  v-if="person.photo_url"
-                  :src="person.photo_url"
-                  :alt="person.name"
-                  class="mx-auto h-14 w-14 rounded-full object-cover"
+                  v-if="combo.image_url"
+                  :src="combo.image_url"
+                  :alt="combo.name"
+                  class="h-14 w-14 shrink-0 rounded-lg object-cover"
                 />
-                <div
-                  v-else
-                  class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-500"
-                >
-                  {{ person.name.charAt(0) }}
+                <div class="min-w-0 flex-1">
+                  <p class="font-medium text-slate-800">{{ combo.name }}</p>
+                  <p class="mt-0.5 text-sm text-slate-500">
+                    {{ combo.services.map((s) => s.name).join(' + ') }}
+                  </p>
+                  <p class="mt-1 text-sm text-slate-600">
+                    <b>{{ money(combo.total, page.business.currency) }}</b>
+                    <span v-if="combo.discount > 0" class="ml-1 text-slate-400 line-through">
+                      {{ money(combo.list_total, page.business.currency) }}
+                    </span>
+                    · {{ combo.total_minutes }} min
+                  </p>
                 </div>
-                <p class="mt-1 text-xs text-slate-600">{{ person.name }}</p>
+                <button
+                  type="button"
+                  class="shrink-0 rounded-lg border border-emerald-400 bg-white px-3 py-1.5 text-sm text-emerald-800 transition hover:border-emerald-600"
+                  @click="bookPackage(combo.id)"
+                >
+                  Reservar
+                </button>
               </div>
             </div>
           </section>
-        </div>
+
+          <!-- Servicios -->
+          <section v-if="page.services.length" class="mb-10">
+            <h2 class="mb-3 text-lg font-semibold text-slate-900">Servicios</h2>
+
+            <div class="divide-y divide-slate-100 rounded-xl border border-slate-200">
+              <div v-for="item in page.services" :key="item.id" class="flex items-center gap-4 p-4">
+                <img
+                  v-if="item.image_url"
+                  :src="item.image_url"
+                  :alt="item.name"
+                  class="h-14 w-14 shrink-0 rounded-lg object-cover"
+                />
+                <div class="min-w-0 flex-1">
+                  <p class="font-medium text-slate-800">{{ item.name }}</p>
+                  <p v-if="item.description" class="mt-0.5 text-sm text-slate-500">
+                    {{ item.description }}
+                  </p>
+                  <p class="mt-1 text-sm text-slate-600">
+                    {{ money(item.price, page.business.currency) }} · {{ item.duration_min }} min
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  class="shrink-0 rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 transition hover:border-slate-500"
+                  @click="bookService(item.id)"
+                >
+                  Reservar
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Reservar -->
+          <section ref="bookingRef" class="mb-10 scroll-mt-4">
+            <h2 class="mb-3 text-lg font-semibold text-slate-900">Reservar tu cita</h2>
+            <BookingFlow
+              :slug="slug"
+              :page="page"
+              :preselected="preselected"
+              :preselected-package="preselectedPackage"
+            />
+          </section>
+
+          <!-- Horario y equipo -->
+          <div class="grid gap-8 sm:grid-cols-2">
+            <section>
+              <h2 class="mb-3 text-lg font-semibold text-slate-900">Horario</h2>
+              <dl class="text-sm">
+                <div
+                  v-for="(group, i) in groupedHours"
+                  :key="i"
+                  class="flex justify-between border-b border-slate-100 py-1.5"
+                >
+                  <dt class="text-slate-600">{{ group.label }}</dt>
+                  <dd :class="group.hours === 'Cerrado' ? 'text-slate-400' : 'text-slate-800'">
+                    {{ group.hours }}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+
+            <section v-if="page.resources.length">
+              <h2 class="mb-3 text-lg font-semibold text-slate-900">Quiénes te atienden</h2>
+              <div class="flex flex-wrap gap-3">
+                <div v-for="person in page.resources" :key="person.id" class="text-center">
+                  <img
+                    v-if="person.photo_url"
+                    :src="person.photo_url"
+                    :alt="person.name"
+                    class="mx-auto h-14 w-14 rounded-full object-cover"
+                  />
+                  <div
+                    v-else
+                    class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-500"
+                  >
+                    {{ person.name.charAt(0) }}
+                  </div>
+                  <p class="mt-1 text-xs text-slate-600">{{ person.name }}</p>
+                </div>
+              </div>
+            </section>
+          </div>
+        </template>
       </main>
 
       <footer class="border-t border-slate-100 py-6 text-center text-xs text-slate-400">

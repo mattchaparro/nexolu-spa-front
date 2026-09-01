@@ -117,7 +117,9 @@ const ESTRELLAS = [1, 2, 3, 4, 5]
 
       <template v-else>
         <header class="mb-6">
-          <h1 class="text-xl font-semibold text-slate-900">¿Cómo te fue en {{ data.business.name }}?</h1>
+          <h1 class="text-xl font-semibold text-slate-900">
+            ¿Cómo te fue en {{ data.business.name }}?
+          </h1>
           <p class="mt-1 text-sm first-letter:uppercase text-slate-500">{{ data.date_label }}</p>
         </header>
 

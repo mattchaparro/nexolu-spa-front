@@ -84,7 +84,12 @@ function outcomeIcon(status: StageActionOutcome['status']): string {
     </div>
 
     <ul v-if="outcomes.length" class="mt-3 space-y-1">
-      <li v-for="(outcome, i) in outcomes" :key="i" class="text-xs" :class="outcomeClass(outcome.status)">
+      <li
+        v-for="(outcome, i) in outcomes"
+        :key="i"
+        class="text-xs"
+        :class="outcomeClass(outcome.status)"
+      >
         {{ outcomeIcon(outcome.status) }} {{ outcome.label }}
         <span v-if="outcome.detail" class="text-slate-500">— {{ outcome.detail }}</span>
       </li>

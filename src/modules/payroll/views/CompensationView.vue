@@ -109,7 +109,9 @@ function modeLabel(name: string): string {
     <p v-if="isLoading" class="text-sm text-slate-500">Cargando…</p>
 
     <div v-else class="grid gap-6 lg:grid-cols-[18rem_1fr]">
-      <aside class="divide-y divide-slate-100 self-start rounded-lg border border-slate-200 bg-white">
+      <aside
+        class="divide-y divide-slate-100 self-start rounded-lg border border-slate-200 bg-white"
+      >
         <button
           v-for="row in team"
           :key="row.id"
@@ -160,8 +162,8 @@ function modeLabel(name: string): string {
 
               <p class="-mt-1 text-xs text-slate-500">
                 Equivale a {{ money(dailyRate) }} por día. El período de liquidación es irregular
-                —se paga cuando ella pide— así que la base se prorratea por los días que corran.
-                Un mes son 30 días, para que febrero no pague más por día que enero.
+                —se paga cuando ella pide— así que la base se prorratea por los días que corran. Un
+                mes son 30 días, para que febrero no pague más por día que enero.
               </p>
 
               <div>
@@ -174,11 +176,7 @@ function modeLabel(name: string): string {
             </template>
 
             <div>
-              <NxDatePicker
-                v-model="startedOn"
-                label="Se le liquida desde"
-                :disabled="saving"
-              />
+              <NxDatePicker v-model="startedOn" label="Se le liquida desde" :disabled="saving" />
               <p class="mt-1 text-xs text-slate-500">
                 Solo para la primera liquidación. Después, cada período arranca donde terminó el
                 anterior y esta fecha deja de tener efecto.

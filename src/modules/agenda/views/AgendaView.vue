@@ -221,6 +221,29 @@ async function onMove(payload: {
   }
 }
 
+/*
+ * Los avisos de "listo" van en funciones con nombre, no en el template.
+ *
+ * Un manejador con dos sentencias en línea funciona sólo mientras alguien lo
+ * escriba con punto y coma: Prettier lo parte en dos líneas, los quita, y el
+ * compilador de plantillas de Vue lo rechaza. Eso ya rompió esta pantalla
+ * entera una vez, y el typecheck no lo ve porque no compila plantillas.
+ */
+function onBooked(): void {
+  pick.value = null
+  notify('Cita agendada.', 'success')
+}
+
+function onCharged(): void {
+  toCheckout.value = null
+  notify('Servicio cobrado. La comisión quedó registrada.', 'success')
+}
+
+function onCancelled(): void {
+  toCheckout.value = null
+  notify('Cita cancelada. El horario vuelve a estar libre.', 'success')
+}
+
 /** Abre el cobro de una cita tocada en la rejilla. */
 function onOpen(appointment: GridAppointment): void {
   if (appointment.is_paid) {
@@ -335,28 +358,22 @@ function onOpen(appointment: GridAppointment): void {
       />
     </div>
 
+    <!-- `location-id`: se agenda en el local que está en pantalla, no en
+         cualquiera. El modal sólo ofrece a la gente de esa sede. -->
     <BookSlotModal
       :pick="pick"
       :services="services ?? []"
       :default-service-id="services?.[0]?.id ?? null"
+      :location-id="locationId"
       @close="pick = null"
-      @booked="
-        pick = null
-        notify('Cita agendada.', 'success')
-      "
+      @booked="onBooked"
     />
 
     <CheckoutModal
       :appointment="toCheckout"
       @close="toCheckout = null"
-      @done="
-        toCheckout = null
-        notify('Servicio cobrado. La comisión quedó registrada.', 'success')
-      "
-      @cancelled="
-        toCheckout = null
-        notify('Cita cancelada. El horario vuelve a estar libre.', 'success')
-      "
+      @done="onCharged"
+      @cancelled="onCancelled"
     />
   </section>
 </template>

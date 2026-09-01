@@ -123,11 +123,26 @@ export interface CompensationPayload {
   base_periods: Array<{ name: string; label: string; days: number }>
 }
 
-export function usePendingPayroll() {
+/**
+ * Lo pendiente de todas, opcionalmente de una sola sede.
+ *
+ * Filtra por la sede de LA PERSONA, no la de sus citas: lo que se le paga sale
+ * de todo lo que atendió, y partirlo por la sede de cada cita dejaría media
+ * liquidación en cada lista y ninguna de las dos se podría pagar.
+ */
+export function usePendingPayroll(locationId?: Ref<number | null>) {
   return useQuery({
-    queryKey: ['payroll', 'pending'],
+    queryKey: ['payroll', 'pending', locationId ?? null],
     queryFn: async () =>
-      (await httpClient.get<{ until: string; resources: PendingRow[] }>('/payroll/pending')).data,
+      (
+        await httpClient.get<{
+          until: string
+          resources: PendingRow[]
+          locations: Array<{ id: number; name: string }>
+        }>('/payroll/pending', {
+          params: locationId?.value ? { location_id: locationId.value } : {},
+        })
+      ).data,
   })
 }
 
