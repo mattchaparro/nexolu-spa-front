@@ -80,18 +80,21 @@ function onFile(event: Event): void {
 
 /** Lo que el recurso queda ocupado, que es lo que el cliente no ve. */
 const occupied = computed(
-  () => Number(duration.value || 0) + Number(bufferBefore.value || 0) + Number(bufferAfter.value || 0),
+  () =>
+    Number(duration.value || 0) + Number(bufferBefore.value || 0) + Number(bufferAfter.value || 0),
 )
 
 async function submit(): Promise<void> {
   error.value = null
 
-  const resources: ServiceAssignment[] = [...assignments.value.entries()].map(([id, overrides]) => ({
-    resource_id: id,
-    duration_override_min: overrides.duration ? Number(overrides.duration) : null,
-    // El formulario pide porcentaje (40); la API guarda fracción (0.40).
-    commission_rate_override: overrides.commission ? Number(overrides.commission) / 100 : null,
-  }))
+  const resources: ServiceAssignment[] = [...assignments.value.entries()].map(
+    ([id, overrides]) => ({
+      resource_id: id,
+      duration_override_min: overrides.duration ? Number(overrides.duration) : null,
+      // El formulario pide porcentaje (40); la API guarda fracción (0.40).
+      commission_rate_override: overrides.commission ? Number(overrides.commission) / 100 : null,
+    }),
+  )
 
   try {
     await mutateAsync({
@@ -128,9 +131,19 @@ async function submit(): Promise<void> {
       <NxInput v-model="description" label="Descripción (opcional)" :disabled="isPending" />
 
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <NxInput v-model="duration" label="Duración (min)" inputmode="numeric" :disabled="isPending" />
+        <NxInput
+          v-model="duration"
+          label="Duración (min)"
+          inputmode="numeric"
+          :disabled="isPending"
+        />
         <NxInput v-model="price" label="Precio" inputmode="numeric" :disabled="isPending" />
-        <NxInput v-model="bufferBefore" label="Preparación" inputmode="numeric" :disabled="isPending" />
+        <NxInput
+          v-model="bufferBefore"
+          label="Preparación"
+          inputmode="numeric"
+          :disabled="isPending"
+        />
         <NxInput v-model="bufferAfter" label="Limpieza" inputmode="numeric" :disabled="isPending" />
       </div>
 
@@ -140,7 +153,12 @@ async function submit(): Promise<void> {
       </p>
 
       <div class="grid grid-cols-2 gap-3">
-        <NxInput v-model="commission" label="Comisión (%)" inputmode="numeric" :disabled="isPending" />
+        <NxInput
+          v-model="commission"
+          label="Comisión (%)"
+          inputmode="numeric"
+          :disabled="isPending"
+        />
         <div class="flex items-end pb-2">
           <NxSwitch v-model="bookableOnline" :disabled="isPending" />
           <span class="ml-2 text-sm text-slate-600">Reservable en línea</span>
@@ -184,7 +202,9 @@ async function submit(): Promise<void> {
               :disabled="isPending"
               @change="toggle(person.id)"
             />
-            <label :for="`r-${person.id}`" class="flex-1 text-sm text-slate-700">{{ person.name }}</label>
+            <label :for="`r-${person.id}`" class="flex-1 text-sm text-slate-700">{{
+              person.name
+            }}</label>
 
             <template v-if="assignments.has(person.id)">
               <input
@@ -215,7 +235,9 @@ async function submit(): Promise<void> {
       <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
 
       <div class="flex justify-end gap-2">
-        <NxButton variant="secondary" :disabled="isPending" @click="emit('close')">Cancelar</NxButton>
+        <NxButton variant="secondary" :disabled="isPending" @click="emit('close')"
+          >Cancelar</NxButton
+        >
         <NxButton :loading="isPending" :disabled="!name.trim()" @click="submit">Guardar</NxButton>
       </div>
     </div>

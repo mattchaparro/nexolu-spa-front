@@ -168,7 +168,10 @@ async function destroy(row: ResourceBreak): Promise<void> {
             variant="secondary"
             size="sm"
             :disabled="saving"
-            @click="adding = false; reset()"
+            @click="
+              adding = false
+              reset()
+            "
           >
             Cancelar
           </NxButton>

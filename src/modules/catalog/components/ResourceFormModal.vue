@@ -42,6 +42,8 @@ const password = ref('')
 const phone = ref('')
 const role = ref('staff')
 const commission = ref('')
+const bio = ref('')
+const isPublic = ref(true)
 const photo = ref<File | null>(null)
 const preview = ref<string | null>(null)
 const error = ref<string | null>(null)
@@ -90,6 +92,8 @@ watch(
     role.value = 'staff'
     // El formulario habla en porcentaje (50); la API guarda fracción (0.50).
     commission.value = r?.commission_rate != null ? String(Math.round(r.commission_rate * 100)) : ''
+    bio.value = r?.bio ?? ''
+    isPublic.value = r?.is_public ?? true
     photo.value = null
     preview.value = r?.photo_url ?? null
     error.value = null
@@ -117,6 +121,8 @@ async function submit(): Promise<void> {
         name: name.value.trim(),
         color: color.value,
         commission_rate: commissionRate,
+        bio: bio.value.trim() || null,
+        is_public: isPublic.value,
         // Sólo se manda si de verdad cambió: el servidor rechaza el traslado
         // de quien tiene citas pendientes, y no tiene sentido arriesgar ese
         // 422 en un cambio de nombre.
@@ -131,6 +137,8 @@ async function submit(): Promise<void> {
         last_name: lastName.value.trim() || null,
         color: color.value,
         commission_rate: commissionRate,
+        bio: bio.value.trim() || null,
+        is_public: isPublic.value,
         ...(isPerson.value && email.value.trim()
           ? {
               email: email.value.trim(),
@@ -241,6 +249,33 @@ async function submit(): Promise<void> {
           <template v-else>
             Si lo dejas vacío, cada servicio decide con su propio porcentaje (o el de su categoría).
           </template>
+        </p>
+      </div>
+
+      <!-- La reseña de la página pública. Corta a propósito: la lee alguien en
+           el navegador de WhatsApp con media pantalla. -->
+      <div v-if="isPerson">
+        <label class="text-sm text-slate-700">
+          Reseña para tu página ({{ bio.length }}/280)
+          <textarea
+            v-model="bio"
+            rows="2"
+            maxlength="280"
+            placeholder="Especialista en acrílicas, 8 años de experiencia."
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900"
+            :disabled="isPending"
+          />
+        </label>
+
+        <label class="mt-2 flex items-center gap-2 text-sm text-slate-700">
+          <input v-model="isPublic" type="checkbox" :disabled="isPending" />
+          Mostrarla en la página pública
+        </label>
+        <!-- Son dos preguntas distintas y confundirlas saca de la vitrina a
+             quien sí debería estar. -->
+        <p class="mt-1 text-xs text-slate-500">
+          Distinto de aceptar reservas por internet: alguien cuya agenda manejas tú puede aparecer
+          igual en la página.
         </p>
       </div>
 

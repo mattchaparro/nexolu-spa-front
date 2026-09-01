@@ -6,7 +6,11 @@ import { useAuthStore } from '@/stores/auth.store'
 import { NxButton } from '@/ui'
 
 import ServiceFormModal from '../components/ServiceFormModal.vue'
-import { useAdminServices, useDeactivateService, type AdminService } from '../composables/useCatalog'
+import {
+  useAdminServices,
+  useDeactivateService,
+  type AdminService,
+} from '../composables/useCatalog'
 
 const auth = useAuthStore()
 const { notify } = useSystemAlert()
@@ -33,7 +37,11 @@ function onSaved(): void {
 }
 
 async function remove(service: AdminService): Promise<void> {
-  if (!window.confirm(`¿Desactivar "${service.name}"? Dejará de ofrecerse, pero se conserva su historial.`)) {
+  if (
+    !window.confirm(
+      `¿Desactivar "${service.name}"? Dejará de ofrecerse, pero se conserva su historial.`,
+    )
+  ) {
     return
   }
 
@@ -62,7 +70,10 @@ function money(value: number): string {
 
     <p v-if="isLoading" class="text-sm text-slate-500">Cargando…</p>
 
-    <p v-else-if="!services?.length" class="rounded-md bg-slate-100 px-4 py-6 text-sm text-slate-600">
+    <p
+      v-else-if="!services?.length"
+      class="rounded-md bg-slate-100 px-4 py-6 text-sm text-slate-600"
+    >
       Todavía no hay servicios. Crea el primero para poder agendar.
     </p>
 
@@ -100,7 +111,9 @@ function money(value: number): string {
 
           <p class="mt-1 text-xs text-slate-500">
             {{ service.resource_ids?.length ?? 0 }} del equipo
-            <span v-if="!service.is_bookable_online" class="ml-1 text-amber-700">· solo en el local</span>
+            <span v-if="!service.is_bookable_online" class="ml-1 text-amber-700"
+              >· solo en el local</span
+            >
             <span v-if="!service.is_active" class="ml-1 text-slate-500">· inactivo</span>
           </p>
 
@@ -114,11 +127,6 @@ function money(value: number): string {
       </article>
     </div>
 
-    <ServiceFormModal
-      :service="editing"
-      :open="open"
-      @close="open = false"
-      @saved="onSaved"
-    />
+    <ServiceFormModal :service="editing" :open="open" @close="open = false" @saved="onSaved" />
   </section>
 </template>

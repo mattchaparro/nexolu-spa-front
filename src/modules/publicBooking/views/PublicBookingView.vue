@@ -336,23 +336,45 @@ const groupedHours = computed(() => {
               </dl>
             </section>
 
-            <section v-if="page.resources.length">
+            <!-- Colaboradores: foto, reseña corta y puntuación.
+                 Sale `page.team` y no `page.resources`: aquel es el selector de
+                 "con quién reservar", y son conjuntos que no coinciden. Alguien
+                 cuya agenda maneja el mostrador no acepta reservas por internet
+                 y aun así merece estar en la vitrina. -->
+            <section v-if="page.team.length">
               <h2 class="mb-3 text-lg font-semibold text-slate-900">Quiénes te atienden</h2>
-              <div class="flex flex-wrap gap-3">
-                <div v-for="person in page.resources" :key="person.id" class="text-center">
+
+              <div class="flex flex-col gap-4">
+                <div v-for="person in page.team" :key="person.id" class="flex gap-3">
                   <img
                     v-if="person.photo_url"
                     :src="person.photo_url"
                     :alt="person.name"
-                    class="mx-auto h-14 w-14 rounded-full object-cover"
+                    class="h-16 w-16 shrink-0 rounded-full object-cover"
                   />
                   <div
                     v-else
-                    class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-500"
+                    class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-slate-100 text-lg text-slate-500"
                   >
                     {{ person.name.charAt(0) }}
                   </div>
-                  <p class="mt-1 text-xs text-slate-600">{{ person.name }}</p>
+
+                  <div class="min-w-0">
+                    <p class="font-medium text-slate-800">{{ person.name }}</p>
+
+                    <!-- La nota y DE CUÁNTAS: "4.8" solo es una cifra que no se
+                         puede juzgar. Sin suficientes calificaciones no se
+                         muestra nada — un 0.0 al lado de una foto lee como
+                         "pésimo", no como "todavía no sabemos". -->
+                    <p v-if="person.rating !== null" class="text-sm text-amber-600">
+                      ★ {{ person.rating }}
+                      <span class="text-xs text-slate-400">
+                        ({{ person.ratings_count }} calificaciones)
+                      </span>
+                    </p>
+
+                    <p v-if="person.bio" class="mt-0.5 text-sm text-slate-600">{{ person.bio }}</p>
+                  </div>
                 </div>
               </div>
             </section>

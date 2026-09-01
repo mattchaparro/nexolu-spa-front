@@ -67,7 +67,9 @@ async function toggleActive(resource: TeamResource): Promise<void> {
 
   if (
     !activating &&
-    !window.confirm(`¿Desactivar a ${resource.name}? Dejará de aparecer en la agenda y no podrá entrar.`)
+    !window.confirm(
+      `¿Desactivar a ${resource.name}? Dejará de aparecer en la agenda y no podrá entrar.`,
+    )
   ) {
     return
   }
@@ -152,7 +154,9 @@ async function toggleActive(resource: TeamResource): Promise<void> {
       <!-- Los espacios van aparte: se ocupan igual que una persona, pero no
            son una agenda que alguien mire ni tienen cuenta. -->
       <template v-if="spaces.length">
-        <h2 class="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">Espacios y equipos</h2>
+        <h2 class="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">
+          Espacios y equipos
+        </h2>
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <article
             v-for="space in spaces"
@@ -183,13 +187,19 @@ async function toggleActive(resource: TeamResource): Promise<void> {
       :cupo-lleno="cupoLleno"
       :limite-equipo="limiteEquipo"
       @close="formOpen = false"
-      @saved="formOpen = false; notify('Guardado.', 'success')"
+      @saved="
+        formOpen = false
+        notify('Guardado.', 'success')
+      "
     />
 
     <ScheduleEditor
       :resource="schedulingFor"
       @close="schedulingFor = null"
-      @saved="schedulingFor = null; notify('Horario actualizado.', 'success')"
+      @saved="
+        schedulingFor = null
+        notify('Horario actualizado.', 'success')
+      "
     />
   </section>
 </template>

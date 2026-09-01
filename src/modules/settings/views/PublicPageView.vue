@@ -10,7 +10,7 @@ import { NxButton } from '@/ui'
 interface PublicPagePayload {
   enabled: boolean
   slug: string
-  profile: Record<string, string | null>
+  profile: Record<string, string | boolean | null>
   labels: Record<string, string>
   logo_url: string | null
   cover_url: string | null
@@ -40,6 +40,15 @@ const form = ref<Record<string, string>>({
   maps_url: '',
   google_review_url: '',
 })
+
+/**
+ * Si la puntuación de cada persona sale en la página.
+ *
+ * Aparte de `form` porque es un booleano y no texto: publicar la nota de
+ * alguien es una decisión sobre una persona real, no una preferencia de
+ * diseño. Viene apagado y se enciende acá.
+ */
+const showStaffRatings = ref(false)
 const cover = ref<File | null>(null)
 const offered = ref<Set<number>>(new Set())
 const error = ref<string | null>(null)
@@ -49,9 +58,14 @@ watch(
   (payload) => {
     if (!payload) return
 
+    // `form` sólo tiene los campos de texto; el interruptor va aparte, así que
+    // lo que no sea string se ignora en vez de terminar como "true" en un input.
     for (const key of Object.keys(form.value)) {
-      form.value[key] = payload.profile[key] ?? ''
+      const value = payload.profile[key]
+      form.value[key] = typeof value === 'string' ? value : ''
     }
+
+    showStaffRatings.value = payload.profile.show_staff_ratings === true
 
     offered.value = new Set(payload.services.filter((s) => s.is_bookable_online).map((s) => s.id))
   },
@@ -69,6 +83,9 @@ const { mutateAsync: save, isPending: saving } = useMutation({
     for (const [key, value] of Object.entries(form.value)) {
       body.append(key, value)
     }
+
+    // Laravel lee "1"/"0" como booleano; "true"/"false" no.
+    body.append('show_staff_ratings', showStaffRatings.value ? '1' : '0')
 
     if (cover.value) {
       body.append('cover', cover.value)
@@ -263,6 +280,28 @@ async function copyLink(url?: string): Promise<void> {
                 costarte la ficha del negocio.
               </span>
             </label>
+
+            <!-- Publicar la nota de alguien es una decisión sobre una persona
+                 real, no una preferencia de diseño. Por eso viene apagado y el
+                 texto dice qué implica antes de encenderlo. -->
+            <div class="rounded-md border border-slate-200 p-3">
+              <label class="flex items-start gap-2 text-sm text-slate-700">
+                <input
+                  v-model="showStaffRatings"
+                  type="checkbox"
+                  class="mt-0.5"
+                  :disabled="saving"
+                />
+                <span>
+                  {{ data.labels.show_staff_ratings }}
+                  <span class="mt-1 block text-xs text-slate-500">
+                    Sale la estrella y el promedio de cada persona en tu página, junto a su foto.
+                    Sólo aparece con al menos 5 calificaciones: con dos, una clienta que tuvo un mal
+                    día deja a alguien marcada para siempre.
+                  </span>
+                </span>
+              </label>
+            </div>
 
             <label class="text-sm text-slate-700">
               Foto de portada

@@ -38,6 +38,10 @@ export interface TeamResource {
   is_active: boolean
   /** Su porcentaje general. Nulo = cada servicio decide. */
   commission_rate: number | null
+  /** La reseña corta de la página pública. */
+  bio: string | null
+  /** Si sale en la sección de colaboradores. */
+  is_public: boolean
 }
 
 export interface Schedule {
@@ -61,7 +65,8 @@ export function useAdminServices(onlyActive = false) {
   return useQuery({
     queryKey: ['services', 'admin', onlyActive],
     queryFn: async () =>
-      (await httpClient.get<AdminService[]>('/services', { params: { only_active: onlyActive } })).data,
+      (await httpClient.get<AdminService[]>('/services', { params: { only_active: onlyActive } }))
+        .data,
   })
 }
 
@@ -102,10 +107,16 @@ function serviceFormData(payload: Record<string, unknown>, image?: File | null):
         const assignment = row as ServiceAssignment
         form.append(`resources[${i}][resource_id]`, String(assignment.resource_id))
         if (assignment.duration_override_min != null) {
-          form.append(`resources[${i}][duration_override_min]`, String(assignment.duration_override_min))
+          form.append(
+            `resources[${i}][duration_override_min]`,
+            String(assignment.duration_override_min),
+          )
         }
         if (assignment.commission_rate_override != null) {
-          form.append(`resources[${i}][commission_rate_override]`, String(assignment.commission_rate_override))
+          form.append(
+            `resources[${i}][commission_rate_override]`,
+            String(assignment.commission_rate_override),
+          )
         }
       })
       continue
@@ -174,11 +185,25 @@ export function useSaveResource() {
     }) => {
       const form = new FormData()
 
+      /*
+       * `null` SÍ viaja, como cadena vacía; sólo se omite lo que no se mandó.
+       *
+       * Laravel convierte la cadena vacía en null antes de validar, y los
+       * campos que se pueden BORRAR están declarados `present`. Omitir los
+       * nulos hacía imposible quitarle a alguien su reseña o su porcentaje de
+       * comisión una vez puestos: el servidor los veía como "no me lo
+       * mandaste" y los dejaba igual, sin decir nada.
+       */
       for (const [key, value] of Object.entries(payload)) {
-        if (value === null || value === undefined || value === '') {
+        if (value === undefined) {
           continue
         }
-        form.append(key, typeof value === 'boolean' ? (value ? '1' : '0') : String(value))
+
+        // Laravel lee "1"/"0" como booleano; "true"/"false" no.
+        form.append(
+          key,
+          typeof value === 'boolean' ? (value ? '1' : '0') : value === null ? '' : String(value),
+        )
       }
 
       if (photo) {

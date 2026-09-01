@@ -17,7 +17,13 @@ const props = defineProps<{ resource: TeamResource | null }>()
 const emit = defineEmits<{ close: []; saved: [] }>()
 
 const resourceId = ref<number | null>(null)
-watch(() => props.resource, (r) => { resourceId.value = r?.id ?? null }, { immediate: true })
+watch(
+  () => props.resource,
+  (r) => {
+    resourceId.value = r?.id ?? null
+  },
+  { immediate: true },
+)
 
 const { data: existing } = useSchedules(resourceId)
 const { mutateAsync, isPending } = useSaveSchedules()
@@ -99,8 +105,8 @@ async function submit(): Promise<void> {
   >
     <div class="flex flex-col gap-4">
       <p class="text-sm text-slate-500">
-        Marca los días que trabaja y su franja. Las vacaciones y los bloqueos de
-        un día puntual se manejan aparte, sin tocar este horario.
+        Marca los días que trabaja y su franja. Las vacaciones y los bloqueos de un día puntual se
+        manejan aparte, sin tocar este horario.
       </p>
 
       <div class="divide-y divide-slate-100 rounded-md border border-slate-200">
@@ -111,7 +117,9 @@ async function submit(): Promise<void> {
             type="checkbox"
             :disabled="isPending"
           />
-          <label :for="`d-${day.weekday}`" class="w-24 text-sm text-slate-700">{{ day.label }}</label>
+          <label :for="`d-${day.weekday}`" class="w-24 text-sm text-slate-700">{{
+            day.label
+          }}</label>
 
           <template v-if="day.enabled">
             <input

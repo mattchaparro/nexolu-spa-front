@@ -57,6 +57,24 @@ export interface PublicLocation {
   maps_url: string | null
 }
 
+/**
+ * Alguien del equipo, para la sección de colaboradores.
+ *
+ * Distinto de `PublicResource`: aquel dice CON QUIÉN SE PUEDE RESERVAR y lo usa
+ * el selector del formulario. Este dice A QUIÉN VAS A ENCONTRAR, y son
+ * conjuntos que no coinciden — una manicurista cuya agenda maneja el mostrador
+ * no acepta reservas por internet y aun así merece estar en la vitrina.
+ */
+export interface PublicTeamMember {
+  id: number
+  name: string
+  photo_url: string | null
+  bio: string | null
+  /** Null si el negocio no publica notas, o si todavía no hay suficientes. */
+  rating: number | null
+  ratings_count: number
+}
+
 export interface PublicHours {
   weekday: number
   label: string
@@ -82,6 +100,9 @@ export interface PublicPage {
     instagram: string | null
     whatsapp: string | null
     maps_url: string | null
+    google_review_url: string | null
+    /** Si la puntuación de cada persona sale en la página. */
+    show_staff_ratings: boolean
   }
   /**
    * Las sedes del negocio, y cuál se está mirando.
@@ -104,6 +125,7 @@ export interface PublicPage {
   services: PublicService[]
   packages: PublicPackage[]
   resources: PublicResource[]
+  team: PublicTeamMember[]
   hours: PublicHours[]
   /**
    * Cuánto hay que abonar para separar, o `null` si el negocio no pide.

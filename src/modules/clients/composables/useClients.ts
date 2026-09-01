@@ -66,6 +66,16 @@ export interface ClientProfile {
   accepts_marketing: boolean
   is_active: boolean
   created_at: string | null
+
+  /**
+   * Sus enlaces personales, para copiarlos y mandarlos A MANO.
+   *
+   * Existen porque WhatsApp todavía no envía nada. Sin esto, "mis citas" y el
+   * prellenado del formulario son pantallas a las que nadie puede entrar
+   * hasta que Meta apruebe un número — y eso bloquea probar el producto
+   * entero, no sólo la mensajería.
+   */
+  links: { portal: string; booking: string }
   stats: ClientStats
   history: HistoryEntry[]
   photos: ClientPhoto[]
