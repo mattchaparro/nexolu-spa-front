@@ -17,6 +17,7 @@ import {
   type PublicResource,
   type PublicService,
 } from '../composables/usePublicBooking'
+import { useRegisterWaitlist } from '../composables/useWaitlist'
 
 const props = defineProps<{
   slug: string
@@ -101,6 +102,75 @@ watch(
 const notes = ref('')
 const error = ref<string | null>(null)
 const done = ref<BookingResult | null>(null)
+
+/*
+|------------------------------------------------------------------------------
+| "¿Te avisamos si se libera un cupo?"
+|------------------------------------------------------------------------------
+| El día lleno es donde nace la lista de espera. La persona ya dijo qué
+| servicio, qué día y quizá con quién; sólo falta su contacto. El rango que se
+| guarda es "ese día y la semana siguiente": quien busca un viernes suele
+| aceptar el sábado, y un rango de un solo día casi nunca se libera.
+|
+| Sólo para servicio suelto: una visita encadenada necesita que se liberen
+| varios huecos a la vez, y prometer avisos que casi nunca llegarían es peor
+| que no ofrecerlos.
+*/
+const esperaNombre = ref('')
+const esperaTelefono = ref('')
+const esperaError = ref<string | null>(null)
+const esperaLista = ref(false)
+
+// Sus datos de la ficha, si el enlace traía token: mismos campos, misma razón.
+watch(
+  () => props.page.client,
+  (ficha) => {
+    if (!ficha) return
+
+    if (!esperaNombre.value) esperaNombre.value = ficha.name ?? ''
+    if (!esperaTelefono.value) esperaTelefono.value = ficha.phone ?? ''
+  },
+  { immediate: true },
+)
+
+// Cambiar de día o de servicio es OTRA espera posible: se vuelve a ofrecer.
+watch([date, serviceId], () => {
+  esperaLista.value = false
+  esperaError.value = null
+})
+
+const registerWaitlist = useRegisterWaitlist(slug)
+const esperando = computed(() => registerWaitlist.isPending.value)
+
+function apuntarse() {
+  if (!serviceId.value || !date.value) return
+
+  esperaError.value = null
+
+  const desde = new Date(`${date.value}T12:00:00`)
+  const hasta = new Date(desde)
+  hasta.setDate(hasta.getDate() + 7)
+
+  registerWaitlist.mutate(
+    {
+      service_id: serviceId.value,
+      resource_id: resourceId.value,
+      date_from: date.value,
+      date_to: hasta.toLocaleDateString('sv-SE'),
+      location: locationSlug.value,
+      client_name: esperaNombre.value.trim(),
+      client_phone: esperaTelefono.value.trim(),
+    },
+    {
+      onSuccess: () => {
+        esperaLista.value = true
+      },
+      onError: (e) => {
+        esperaError.value = extractErrorMessage(e, 'No se pudo guardar. Intenta de nuevo.')
+      },
+    },
+  )
+}
 
 const today = new Date().toLocaleDateString('sv-SE')
 /** Desde dónde se piden los días de las fichas rápidas. */
@@ -902,9 +972,50 @@ const depositAmount = computed(() => {
           </template>
 
           <template v-else>
-            <p v-if="!slotsByFranja.length" class="text-sm text-slate-500">
-              No quedan horas ese día. Prueba con otro.
-            </p>
+            <!-- El día lleno no es un callejón: es donde nace la lista de
+                 espera. La persona ya eligió servicio, fecha y quizá persona —
+                 sólo falta su contacto. -->
+            <div v-if="!slotsByFranja.length" class="text-sm">
+              <p class="text-slate-500">No quedan horas ese día.</p>
+
+              <div class="mt-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                <p v-if="esperaLista" class="text-indigo-900">
+                  ¡Listo! Si se libera un cupo que te sirva, te escribimos por WhatsApp.
+                </p>
+
+                <template v-else>
+                  <p class="font-medium text-indigo-900">¿Te avisamos si se libera un cupo?</p>
+                  <p class="mt-1 text-xs text-indigo-800">
+                    Si alguien cancela por estos días, te llega un mensaje. El cupo es de quien lo
+                    tome primero.
+                  </p>
+
+                  <div class="mt-3 flex flex-col gap-2">
+                    <input
+                      v-model="esperaNombre"
+                      placeholder="Tu nombre"
+                      class="min-h-11 rounded-lg border border-indigo-200 px-3 text-base text-slate-900"
+                    />
+                    <input
+                      v-model="esperaTelefono"
+                      type="tel"
+                      inputmode="tel"
+                      placeholder="Tu WhatsApp"
+                      class="min-h-11 rounded-lg border border-indigo-200 px-3 text-base text-slate-900"
+                    />
+                    <p v-if="esperaError" class="text-xs text-red-700">{{ esperaError }}</p>
+                    <button
+                      type="button"
+                      class="min-h-11 rounded-lg bg-indigo-600 px-4 text-sm font-medium text-white disabled:opacity-50"
+                      :disabled="esperando || !esperaNombre.trim() || !esperaTelefono.trim()"
+                      @click="apuntarse"
+                    >
+                      Avisarme
+                    </button>
+                  </div>
+                </template>
+              </div>
+            </div>
 
             <div v-for="grupo in slotsByFranja" :key="grupo.key" class="mb-3">
               <p class="mb-1.5 text-xs text-slate-400">{{ grupo.label }}</p>

@@ -51,6 +51,17 @@ export const routes: RouteRecordRaw[] = [
     meta: { public: true, layout: 'blank' },
   },
   {
+    /*
+     * "Se liberó un cupo": el enlace de la lista de espera. Mismo trato que
+     * "mis citas" — el token de la URL es el secreto, no el teléfono — y la
+     * misma pantalla corta de WhatsApp.
+     */
+    path: '/cupo/:businessSlug/:token',
+    name: 'take-slot',
+    component: () => import('@/modules/publicBooking/views/TakeSlotView.vue'),
+    meta: { public: true, layout: 'blank' },
+  },
+  {
     // La encuesta llega por WhatsApp: sin sesión y con el token en la URL.
     path: '/encuesta/:token',
     name: 'survey',
