@@ -148,12 +148,15 @@ export function useCheckout() {
   return useMutation({
     mutationFn: async ({ id, ...body }: CheckoutPayload) =>
       (await httpClient.post<Appointment>(`/appointments/${id}/checkout`, body)).data,
-    // Cobrar no libera el horario, asi que la disponibilidad no cambia: solo
-    // hacen falta las dos vistas de la agenda, que muestran el estado y el
-    // total cobrado.
+    // Cobrar no libera el horario, asi que la disponibilidad no cambia. Pero
+    // el dinero si se movio: ademas de las vistas de la agenda, se refrescan
+    // "Mi dia" (el cobro cambia lo ganado hoy) y las pantallas de caja.
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appointments'] })
       queryClient.invalidateQueries({ queryKey: ['agenda'] })
+      queryClient.invalidateQueries({ queryKey: ['my-work'] })
+      queryClient.invalidateQueries({ queryKey: ['cash'] })
+      queryClient.invalidateQueries({ queryKey: ['daily-summary'] })
     },
   })
 }
