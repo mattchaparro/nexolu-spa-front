@@ -56,11 +56,39 @@ const preselected = ref<number | null>(null)
 const preselectedPackage = ref<number | null>(null)
 
 const bookingRef = ref<HTMLElement | null>(null)
+const verTodos = ref(0)
+
+/*
+ * La vitrina de arriba muestra el catálogo COMPLETO sólo si es corto.
+ *
+ * Con nueve servicios en una pantalla de teléfono, quien llega tiene que rodar
+ * por toda la lista para después encontrarse la misma lista otra vez dentro
+ * del formulario. Se recorta a lo más pedido — que es lo que la vitrina hace
+ * bien — y el catálogo entero vive en el paso de reservar, que ya sabe
+ * filtrarlo por categoría.
+ */
+const VITRINA_COMPLETA_HASTA = 6
+
+const catalogo = computed(() => page.value?.services ?? [])
+
+const vitrinaRecortada = computed(
+  () => catalogo.value.length > VITRINA_COMPLETA_HASTA && catalogo.value.some((s) => s.is_popular),
+)
+
+const vitrina = computed(() =>
+  vitrinaRecortada.value ? catalogo.value.filter((s) => s.is_popular) : catalogo.value,
+)
 
 function bookService(id: number | null): void {
   preselectedPackage.value = null
   preselected.value = id
   bookingRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+/** "Ver los N servicios": lleva al paso de reservar con el filtro quitado. */
+function verTodosLosServicios(): void {
+  verTodos.value++
+  bookService(null)
 }
 
 function bookPackage(id: number): void {
@@ -277,10 +305,12 @@ const groupedHours = computed(() => {
 
           <!-- Servicios -->
           <section v-if="page.services.length" class="mb-10">
-            <h2 class="mb-3 text-lg font-semibold text-slate-900">Servicios</h2>
+            <h2 class="mb-3 text-lg font-semibold text-slate-900">
+              {{ vitrinaRecortada ? 'Los más pedidos' : 'Servicios' }}
+            </h2>
 
             <div class="divide-y divide-slate-100 rounded-xl border border-slate-200">
-              <div v-for="item in page.services" :key="item.id" class="flex items-center gap-4 p-4">
+              <div v-for="item in vitrina" :key="item.id" class="flex items-center gap-4 p-4">
                 <img
                   v-if="item.image_url"
                   :src="item.image_url"
@@ -305,6 +335,15 @@ const groupedHours = computed(() => {
                 </button>
               </div>
             </div>
+
+            <button
+              v-if="vitrinaRecortada"
+              type="button"
+              class="mt-3 min-h-11 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-600 active:bg-slate-50"
+              @click="verTodosLosServicios"
+            >
+              Ver los {{ catalogo.length }} servicios
+            </button>
           </section>
 
           <!-- Reservar -->
@@ -315,6 +354,7 @@ const groupedHours = computed(() => {
               :page="page"
               :preselected="preselected"
               :preselected-package="preselectedPackage"
+              :ver-todos="verTodos"
             />
           </section>
 

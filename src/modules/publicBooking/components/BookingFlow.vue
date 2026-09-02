@@ -24,6 +24,12 @@ const props = defineProps<{
   page: PublicPage
   preselected: number | null
   preselectedPackage: number | null
+  /*
+   * Sube cada vez que alguien pide el catálogo completo desde la vitrina. Es
+   * un contador y no un booleano porque el gesto se repite: pedir "todos" dos
+   * veces tiene que volver a quitar el filtro las dos veces.
+   */
+  verTodos: number
 }>()
 
 const slug = computed(() => props.slug)
@@ -521,7 +527,14 @@ function back(): void {
 |------------------------------------------------------------------------------
 */
 
-const emailValido = computed(() => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.value.trim()))
+/*
+ * Vacío es válido: el correo es opcional. Quien reserva desde el navegador de
+ * WhatsApp no viene a llenar formularios, y el negocio le escribe por ahí --
+ * el teléfono ya lo tiene. Si lo escribe, se revisa que sea un correo.
+ */
+const emailValido = computed(
+  () => email.value.trim() === '' || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.value.trim()),
+)
 const telefonoValido = computed(() => phone.value.replace(/\D/g, '').length >= 7)
 const nombreValido = computed(() => name.value.trim().length > 2)
 
@@ -586,6 +599,79 @@ function restart(): void {
 }
 
 const TITULOS = ['¿Qué te vas a hacer?', '¿Con quién?', '¿Cuándo?', 'Tus datos']
+
+/*
+|------------------------------------------------------------------------------
+| Filtrar la lista de servicios
+|------------------------------------------------------------------------------
+| Un salón con treinta servicios en una pantalla de teléfono es un muro: hay
+| que rodar hasta el final para saber qué hay. Los filtros lo cortan por donde
+| la gente ya piensa — "lo de siempre" o "manos / pestañas / cejas".
+|
+| Aparecen SÓLO cuando hacen falta. Con seis servicios o menos, una fila de
+| chips es un paso extra para leer lo mismo: el muro no existe y el filtro
+| sobra. Ese umbral es la diferencia entre ayudar y decorar.
+*/
+const MINIMO_PARA_FILTRAR = 7
+
+/** Las categorías presentes, en el orden en que aparecen los servicios. */
+const categorias = computed(() => {
+  const vistas = new Map<number, string>()
+
+  for (const s of props.page.services) {
+    if (s.category_id !== null && s.category && !vistas.has(s.category_id)) {
+      vistas.set(s.category_id, s.category)
+    }
+  }
+
+  return [...vistas].map(([id, name]) => ({ id, name }))
+})
+
+const hayPopulares = computed(() => props.page.services.some((s) => s.is_popular))
+
+const puedeFiltrar = computed(
+  () =>
+    props.page.services.length >= MINIMO_PARA_FILTRAR &&
+    (hayPopulares.value || categorias.value.length > 1),
+)
+
+/** null = todos; 'populares' = los más pedidos; un número = esa categoría. */
+const filtro = ref<number | 'populares' | null>(null)
+
+/*
+ * Se entra por "los más pedidos" cuando los hay: en un catálogo largo, lo que
+ * la mayoría reserva es la mejor primera pantalla. Sin ese dato se entra por
+ * la lista completa, que al menos no esconde nada.
+ */
+watch(
+  hayPopulares,
+  (hay) => {
+    if (hay && puedeFiltrar.value && filtro.value === null) filtro.value = 'populares'
+  },
+  { immediate: true },
+)
+
+const serviciosVisibles = computed(() => {
+  if (!puedeFiltrar.value || filtro.value === null) return props.page.services
+  if (filtro.value === 'populares') return props.page.services.filter((s) => s.is_popular)
+
+  return props.page.services.filter((s) => s.category_id === filtro.value)
+})
+
+watch(
+  () => props.verTodos,
+  () => {
+    filtro.value = null
+  },
+)
+
+// Armar una visita de varias partes trabaja sobre la lista entera: filtrar
+// mientras se marcan servicios escondería lo ya marcado, y el número de orden
+// dejaría de tener con qué contarse.
+watch(armando, (activo) => {
+  if (activo) filtro.value = null
+})
+
 
 /*
 |------------------------------------------------------------------------------
@@ -758,6 +844,50 @@ const depositAmount = computed(() => {
         <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Servicios</p>
       </template>
 
+      <!-- Los filtros: sólo con catálogo largo, y nunca mientras se arma una
+           visita de varias partes. -->
+      <div v-if="puedeFiltrar && !armando" class="flex flex-wrap gap-2">
+        <button
+          v-if="hayPopulares"
+          type="button"
+          class="min-h-9 rounded-full border px-3 text-sm transition"
+          :class="
+            filtro === 'populares'
+              ? 'border-slate-900 bg-slate-900 text-white'
+              : 'border-slate-200 bg-white text-slate-600'
+          "
+          @click="filtro = 'populares'"
+        >
+          Los más pedidos
+        </button>
+        <button
+          type="button"
+          class="min-h-9 rounded-full border px-3 text-sm transition"
+          :class="
+            filtro === null
+              ? 'border-slate-900 bg-slate-900 text-white'
+              : 'border-slate-200 bg-white text-slate-600'
+          "
+          @click="filtro = null"
+        >
+          Todos
+        </button>
+        <button
+          v-for="cat in categorias"
+          :key="cat.id"
+          type="button"
+          class="min-h-9 rounded-full border px-3 text-sm transition"
+          :class="
+            filtro === cat.id
+              ? 'border-slate-900 bg-slate-900 text-white'
+              : 'border-slate-200 bg-white text-slate-600'
+          "
+          @click="filtro = cat.id"
+        >
+          {{ cat.name }}
+        </button>
+      </div>
+
       <!-- Armar una visita de varias cosas.
            No se pone de entrada: tocar un servicio y seguir es el camino del
            90% de la gente, y meterle un paso de "marca y confirma" a ese caso
@@ -776,7 +906,7 @@ const depositAmount = computed(() => {
       </button>
 
       <button
-        v-for="item in page.services"
+        v-for="item in serviciosVisibles"
         :key="item.id"
         type="button"
         class="flex min-h-11 items-center gap-3 rounded-xl border bg-white p-3 text-left transition active:bg-slate-50"
@@ -1117,7 +1247,7 @@ const depositAmount = computed(() => {
       </label>
 
       <label class="text-sm font-medium text-slate-700">
-        Tu correo
+        Tu correo (opcional)
         <input
           v-model="email"
           type="email"
@@ -1129,7 +1259,6 @@ const depositAmount = computed(() => {
           class="mt-1 min-h-12 w-full rounded-xl border px-3 text-base text-slate-900 outline-none focus:border-slate-900"
           :class="email && !emailValido ? 'border-amber-400' : 'border-slate-300'"
           :disabled="booking"
-          required
         />
         <span v-if="email && !emailValido" class="mt-1 block text-xs font-normal text-amber-700">
           Revisa el correo, parece incompleto.

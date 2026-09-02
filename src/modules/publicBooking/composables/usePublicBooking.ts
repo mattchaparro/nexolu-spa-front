@@ -19,6 +19,10 @@ export interface PublicService {
   price: number
   image_url: string | null
   resource_ids: number[]
+  category_id: number | null
+  category: string | null
+  /** De los más reservados en los últimos 90 días. El servidor no dice cuántos. */
+  is_popular: boolean
 }
 
 export interface PublicResource {
