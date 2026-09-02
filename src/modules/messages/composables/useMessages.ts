@@ -88,4 +88,6 @@ export const KIND_LABELS: Record<string, string> = {
   encuesta: 'Encuesta',
   etapa: 'Aviso de cita',
   equipo: 'Aviso al equipo',
+  lista_espera: 'Se liberó un cupo',
+  agente: 'Respuesta del agente',
 }
