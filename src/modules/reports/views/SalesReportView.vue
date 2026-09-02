@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 
 import { useMoney } from '@/modules/cash/composables/useMoney'
 import { NxDatePicker } from '@/ui'
+import { toLocalDateIso } from '@/utils/toLocalDateIso'
 
 import { useSalesReport, type SalesFilters } from '../composables/useSalesReport'
 
@@ -11,7 +12,7 @@ const { money } = useMoney()
 function isoDaysAgo(days: number): string {
   const date = new Date()
   date.setDate(date.getDate() - days)
-  return date.toISOString().slice(0, 10)
+  return toLocalDateIso(date)
 }
 
 const today = isoDaysAgo(0)

@@ -8,6 +8,7 @@ import { useLocations } from '@/modules/settings/composables/useLocations'
 import { useAuthStore } from '@/stores/auth.store'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxDatePicker, NxInput, NxModal, NxSelect } from '@/ui'
+import { toLocalDateIso } from '@/utils/toLocalDateIso'
 
 import {
   useDeleteExpense,
@@ -22,7 +23,7 @@ const auth = useAuthStore()
 const { notify } = useSystemAlert()
 const { money } = useMoney()
 
-const today = new Date().toISOString().slice(0, 10)
+const today = toLocalDateIso()
 const from = ref(today.slice(0, 8) + '01')
 const to = ref(today)
 

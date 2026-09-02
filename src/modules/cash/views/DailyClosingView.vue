@@ -6,6 +6,7 @@ import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxDatePicker, NxInput } from '@/ui'
 
 import LocationPicker from '@/modules/settings/components/LocationPicker.vue'
+import { toLocalDateIso } from '@/utils/toLocalDateIso'
 
 import { useCloseDay, useClosingPreview, useClosings, useUndoClosing } from '../composables/useCash'
 import { useMoney } from '../composables/useMoney'
@@ -13,7 +14,7 @@ import { useMoney } from '../composables/useMoney'
 const { notify } = useSystemAlert()
 const { money, signed } = useMoney()
 
-const date = ref(new Date().toISOString().slice(0, 10))
+const date = ref(toLocalDateIso())
 
 /*
  * En qué sede se está cerrando.

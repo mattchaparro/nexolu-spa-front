@@ -5,6 +5,7 @@ import { useSystemAlert } from '@/composables/useSystemAlert'
 import { useLocations } from '@/modules/settings/composables/useLocations'
 import { useAuthStore } from '@/stores/auth.store'
 import { NxButton, NxDatePicker } from '@/ui'
+import { toLocalDateIso } from '@/utils/toLocalDateIso'
 
 import BookSlotModal, { type SlotPick } from '../components/BookSlotModal.vue'
 import CalendarGrid from '../components/CalendarGrid.vue'
@@ -19,7 +20,7 @@ const { notify } = useSystemAlert()
 type View = 'day' | 'week'
 
 const view = ref<View>('day')
-const anchor = ref(new Date().toISOString().slice(0, 10))
+const anchor = ref(toLocalDateIso())
 const focusedResourceId = ref<number | null>(null)
 
 const pick = ref<SlotPick | null>(null)
@@ -33,13 +34,13 @@ function mondayOf(iso: string): string {
   const date = new Date(`${iso}T12:00:00`)
   const offset = (date.getDay() + 6) % 7
   date.setDate(date.getDate() - offset)
-  return date.toISOString().slice(0, 10)
+  return toLocalDateIso(date)
 }
 
 function addDays(iso: string, days: number): string {
   const date = new Date(`${iso}T12:00:00`)
   date.setDate(date.getDate() + days)
-  return date.toISOString().slice(0, 10)
+  return toLocalDateIso(date)
 }
 
 const from = computed(() => (view.value === 'day' ? anchor.value : mondayOf(anchor.value)))
@@ -165,7 +166,7 @@ function shift(days: number): void {
 }
 
 function today(): void {
-  anchor.value = new Date().toISOString().slice(0, 10)
+  anchor.value = toLocalDateIso()
 }
 
 function onPick(payload: { date: string; resourceId: number; time: string }): void {

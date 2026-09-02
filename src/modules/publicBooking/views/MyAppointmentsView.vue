@@ -2,6 +2,8 @@
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
+import { toLocalDateIso } from '@/utils/toLocalDateIso'
+
 import {
   useCancelAppointment,
   useMyAppointments,
@@ -36,7 +38,7 @@ const { data: slotsData, isFetching: cargandoHoras } = usePortalSlots(slug, toke
 const { mutateAsync: reagendar, isPending: reagendando } = useReschedule(slug, token)
 const { mutateAsync: cancelar, isPending: cancelando } = useCancelAppointment(slug, token)
 
-const hoy = new Date().toISOString().slice(0, 10)
+const hoy = toLocalDateIso()
 
 function abrirCambio(cita: PortalAppointment): void {
   error.value = null

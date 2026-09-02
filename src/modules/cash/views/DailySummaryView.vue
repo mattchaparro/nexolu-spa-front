@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import { NxDatePicker } from '@/ui'
 
 import LocationPicker from '@/modules/settings/components/LocationPicker.vue'
+import { toLocalDateIso } from '@/utils/toLocalDateIso'
 
 import { useDailySummary } from '../composables/useCash'
 import { useMoney } from '../composables/useMoney'
@@ -12,7 +13,7 @@ import { useMoney } from '../composables/useMoney'
 const auth = useAuthStore()
 const { money } = useMoney()
 
-const date = ref(new Date().toISOString().slice(0, 10))
+const date = ref(toLocalDateIso())
 
 /*
  * Sin `requerido`: el resumen no se cuadra contra un cajón, responde "cómo nos

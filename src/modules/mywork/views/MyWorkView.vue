@@ -8,6 +8,7 @@ import { NxButton } from '@/ui'
 import CheckoutModal from '@/modules/agenda/components/CheckoutModal.vue'
 import { useAppointments, type Appointment } from '@/modules/agenda/composables/useAppointments'
 import { useMoney } from '@/modules/cash/composables/useMoney'
+import { toLocalDateIso } from '@/utils/toLocalDateIso'
 
 import WalkInModal from '../components/WalkInModal.vue'
 import { useMyWork } from '../composables/useMyWork'
@@ -18,7 +19,7 @@ const { money } = useMoney()
 
 const { data, isLoading } = useMyWork()
 
-const today = ref(new Date().toISOString().slice(0, 10))
+const today = ref(toLocalDateIso())
 const { data: appointments } = useAppointments(today)
 
 const walkInOpen = ref(false)

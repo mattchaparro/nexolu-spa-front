@@ -5,6 +5,7 @@ import { useSystemAlert } from '@/composables/useSystemAlert'
 import { useMoney } from '@/modules/cash/composables/useMoney'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxDatePicker, NxInput, NxModal, NxSelect } from '@/ui'
+import { toLocalDateIso } from '@/utils/toLocalDateIso'
 
 import {
   useAdjustments,
@@ -28,7 +29,7 @@ const { mutateAsync: store, isPending: saving } = useStoreAdjustment()
 const { mutateAsync: remove } = useDeleteAdjustment()
 
 const open = ref(false)
-const today = new Date().toISOString().slice(0, 10)
+const today = toLocalDateIso()
 const date = ref(today)
 const category = ref('anticipo')
 const amount = ref('')
