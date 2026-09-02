@@ -140,6 +140,15 @@ export const routes: RouteRecordRaw[] = [
     meta: { permission: 'citas.ver' },
   },
   {
+    // Quién espera cupo. Mismo criterio que la bandeja: lo maneja quien
+    // atiende el mostrador, y la bandera de recordatorios decide si el
+    // negocio puede prometer avisos — eso lo defiende el servidor.
+    path: '/lista-espera',
+    name: 'waitlist',
+    component: () => import('@/modules/messages/views/WaitlistView.vue'),
+    meta: { permission: 'citas.ver', feature: 'reminders' },
+  },
+  {
     // Sin `feature: multi_location`: un negocio de un solo local también
     // entra acá, para ponerle dirección y enlace de Maps a su sede. La
     // bandera y el tope del plan deciden si puede abrir la SEGUNDA, y eso

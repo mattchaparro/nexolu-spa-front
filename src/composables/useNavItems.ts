@@ -35,6 +35,13 @@ const ITEMS: Array<NavItem & { permission?: string; onlyStaff?: boolean }> = [
     permission: 'citas.ver',
   },
   {
+    label: 'Lista de espera',
+    icon: 'pi pi-hourglass',
+    routeName: 'waitlist',
+    permission: 'citas.ver',
+    featureKey: 'reminders',
+  },
+  {
     label: 'Clientes',
     icon: 'pi pi-users',
     routeName: 'clients',
