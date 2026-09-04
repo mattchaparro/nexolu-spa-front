@@ -1,5 +1,5 @@
 import type { Ref } from 'vue'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/vue-query'
 
 import { httpClient } from '@/services/http/client'
 
@@ -83,6 +83,24 @@ export function useAppointments(date: Ref<string>) {
     queryKey: ['appointments', date],
     queryFn: async () =>
       (await httpClient.get<Appointment[]>('/appointments', { params: { date: date.value } })).data,
+  })
+}
+
+/**
+ * UNA cita, por id.
+ *
+ * No toda pantalla llega a una cita por la rejilla del día. «Mi día» lista lo
+ * atendido y sin cobrar sin límite hacia atrás —a alguien se le olvidó
+ * registrar lo de ayer y lo hace hoy, que es el caso normal— y buscarla en la
+ * agenda de HOY simplemente no la encuentra.
+ *
+ * Se cachea con la misma llave `appointments` para que cobrarla invalide esto
+ * también.
+ */
+export function fetchAppointment(queryClient: QueryClient, id: number): Promise<Appointment> {
+  return queryClient.fetchQuery({
+    queryKey: ['appointments', 'one', id],
+    queryFn: async () => (await httpClient.get<Appointment>(`/appointments/${id}`)).data,
   })
 }
 

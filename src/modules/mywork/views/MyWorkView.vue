@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useQueryClient } from '@tanstack/vue-query'
 
 import { useSystemAlert } from '@/composables/useSystemAlert'
 import { useAuthStore } from '@/stores/auth.store'
 import { NxButton } from '@/ui'
 
 import CheckoutModal from '@/modules/agenda/components/CheckoutModal.vue'
-import { useAppointments, type Appointment } from '@/modules/agenda/composables/useAppointments'
+import {
+  fetchAppointment,
+  useAppointments,
+  type Appointment,
+} from '@/modules/agenda/composables/useAppointments'
 import { useMoney } from '@/modules/cash/composables/useMoney'
 import { toLocalDateIso } from '@/utils/toLocalDateIso'
 
@@ -15,6 +20,7 @@ import WorkPhotoModal from '../components/WorkPhotoModal.vue'
 import { useMyWork, type PendingService } from '../composables/useMyWork'
 
 const auth = useAuthStore()
+const queryClient = useQueryClient()
 const { notify } = useSystemAlert()
 const { money } = useMoney()
 
@@ -29,13 +35,28 @@ const toPhotograph = ref<PendingService | null>(null)
 
 const myResourceId = computed(() => data.value?.resource?.id ?? null)
 
-function charge(appointmentId: number): void {
-  const full = appointments.value?.find((a) => a.id === appointmentId)
+/**
+ * Abre el cobro de un pendiente.
+ *
+ * La rejilla de HOY es sólo un atajo: casi siempre la cita está ahí y se abre
+ * sin ir a la red. Pero los pendientes NO tienen límite hacia atrás —a alguien
+ * se le olvidó registrar lo de ayer y lo hace hoy, que es el caso normal— y
+ * una cita de ayer no está en la agenda de hoy. Antes eso contestaba "no
+ * encontramos esa cita" sobre algo que la misma pantalla acababa de listar.
+ */
+async function charge(appointmentId: number): Promise<void> {
+  const enLaRejilla = appointments.value?.find((a) => a.id === appointmentId)
 
-  if (full) {
-    toCheckout.value = full
-  } else {
-    notify('No encontramos esa cita. Recarga la página.', 'warn')
+  if (enLaRejilla) {
+    toCheckout.value = enLaRejilla
+
+    return
+  }
+
+  try {
+    toCheckout.value = await fetchAppointment(queryClient, appointmentId)
+  } catch {
+    notify('No pudimos abrir esa cita. Recarga la página.', 'warn')
   }
 }
 
