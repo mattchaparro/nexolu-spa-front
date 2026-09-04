@@ -55,19 +55,42 @@ describe('postFormData', () => {
     expect(form.getAll('hashtags[]')).toEqual([''])
   })
 
-  it('desligar una foto de la ficha se manda, no se omite', () => {
-    // Quitarle la imagen a una publicación es lo que hay que hacer cuando la
-    // clienta retira el permiso desde el mostrador.
-    const form = postFormData({ client_photo_id: null })
+  it('vaciar el carrusel llega como una lista vacía', () => {
+    /*
+     * Mismo centinela que los hashtags, y por lo mismo: un arreglo vacío no
+     * escribe nada en un FormData, así que sin él "quitar todas las imágenes"
+     * llegaría como "no me mandaste el campo" y el servidor las conservaría.
+     * Quedarse sin poder vaciar el carrusel es peor que la fealdad de la línea.
+     */
+    const form = postFormData({ keep_image_ids: [] })
 
-    expect(form.get('client_photo_id')).toBe('')
+    expect(form.has('keep_image_ids[]')).toBe(true)
+    expect(form.getAll('keep_image_ids[]')).toEqual([''])
   })
 
-  it('adjunta la imagen sólo cuando hay una nueva', () => {
-    const foto = new File(['x'], 'unas.jpg', { type: 'image/jpeg' })
+  it('conserva el orden de las imágenes que siguen', () => {
+    // La primera es la portada: si el orden se pierde en el camino, la
+    // publicación sale con otra cara en la cuadrícula del perfil.
+    const form = postFormData({ keep_image_ids: [7, 3, 9] })
 
-    expect(postFormData({ image: foto }).has('image')).toBe(true)
-    expect(postFormData({ image: null }).has('image')).toBe(false)
-    expect(postFormData({}).has('image')).toBe(false)
+    expect(form.getAll('keep_image_ids[]')).toEqual(['7', '3', '9'])
+  })
+
+  it('no toca las imágenes si no se dice nada de ellas', () => {
+    // Guardar sólo el texto no puede vaciar el carrusel. Es el error
+    // silencioso que este módulo no se puede permitir.
+    const form = postFormData({ caption: 'Otro texto.' })
+
+    expect(form.has('keep_image_ids[]')).toBe(false)
+    expect(form.has('client_photo_ids[]')).toBe(false)
+    expect(form.has('images[]')).toBe(false)
+  })
+
+  it('las fotos de ficha y los archivos se agregan al final', () => {
+    const foto = new File(['x'], 'unas.jpg', { type: 'image/jpeg' })
+    const form = postFormData({ client_photo_ids: [4, 5], images: [foto] })
+
+    expect(form.getAll('client_photo_ids[]')).toEqual(['4', '5'])
+    expect(form.getAll('images[]')).toHaveLength(1)
   })
 })

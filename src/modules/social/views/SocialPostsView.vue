@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import { useSystemAlert } from '@/composables/useSystemAlert'
 import LocationPicker from '@/modules/settings/components/LocationPicker.vue'
@@ -30,6 +31,8 @@ import {
  * la pegue en Instagram. Ver docs/publicaciones.md en el API.
  */
 const { notify } = useSystemAlert()
+const route = useRoute()
+const router = useRouter()
 
 const locationId = ref<number | null>(null)
 
@@ -40,6 +43,29 @@ const { mutateAsync: crear, isPending: creando } = useSavePost()
 const abierta = ref<SocialPost | null>(null)
 
 const tray = computed(() => data.value?.tray ?? [])
+
+/*
+ * `?abrir=` la deja abierta al llegar.
+ *
+ * Es lo que hace que «Crear publicación» desde la ficha de una clienta no
+ * termine en una bandeja donde hay que buscar cuál de todas es la que uno
+ * acaba de crear. Se limpia de la URL en cuanto se usa: recargar la página
+ * media hora después no debería reabrir un modal.
+ */
+watch(
+  [() => route.query.abrir, data],
+  ([id, board]) => {
+    if (!id || !board) return
+
+    const buscada = [...board.tray, ...board.calendar].find((p) => String(p.id) === String(id))
+
+    if (buscada) {
+      abierta.value = buscada
+      router.replace({ query: {} })
+    }
+  },
+  { immediate: true },
+)
 const angles = computed(() => data.value?.angles ?? [])
 
 /** Lo que ya cumplió su hora y sigue sin salir. Es el único atraso posible. */

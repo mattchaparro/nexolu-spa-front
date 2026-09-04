@@ -6,7 +6,7 @@ import { useServices } from '@/modules/agenda/composables/useAvailability'
 import { NxButton, NxDatePicker, NxInput, NxModal, NxSelect, NxTextarea } from '@/ui'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 
-import PhotoPicker from './PhotoPicker.vue'
+import PostImages from './PostImages.vue'
 import {
   useComposePost,
   useDiscardPost,
@@ -53,10 +53,15 @@ const angle = ref('libre')
 const serviceId = ref<number | null>(null)
 const extra = ref('')
 
-/** Lo que se ve: la subida nueva, o la que ya tenía. */
-const preview = ref<string | null>(null)
-const pendingFile = ref<File | null>(null)
-const clientPhotoId = ref<number | null>(null)
+/*
+ * Cómo va a quedar el carrusel. Tres listas y no una: `keepIds` son las que ya
+ * estaban —en el orden elegido— y las otras dos se agregan al final, que es
+ * exactamente lo que hace el servidor. Una sola lista mezclada prometería un
+ * orden que no va a ocurrir.
+ */
+const keepIds = ref<number[]>([])
+const newPhotoIds = ref<number[]>([])
+const newFiles = ref<File[]>([])
 
 const fecha = ref<string | null>(null)
 const hora = ref('10:00')
@@ -102,9 +107,9 @@ watch(
     angle.value = post.angle
     serviceId.value = null
     extra.value = ''
-    pendingFile.value = null
-    preview.value = post.image_url
-    clientPhotoId.value = null
+    keepIds.value = post.images.map((i) => i.id)
+    newPhotoIds.value = []
+    newFiles.value = []
 
     const cuando = post.scheduled_for ? new Date(post.scheduled_for) : null
 
@@ -141,8 +146,9 @@ async function guardar(): Promise<SocialPost | null> {
       hashtags: tagList(),
       angle: angle.value,
       ...(serviceId.value !== null ? { service_id: serviceId.value } : {}),
-      ...(clientPhotoId.value !== null ? { client_photo_id: clientPhotoId.value } : {}),
-      ...(pendingFile.value ? { image: pendingFile.value } : {}),
+      keep_image_ids: keepIds.value,
+      client_photo_ids: newPhotoIds.value,
+      images: newFiles.value,
     })
   } catch (e) {
     notify(extractErrorMessage(e, 'No pudimos guardarla.'), 'error')
@@ -234,24 +240,6 @@ async function copiar(): Promise<void> {
     notify('Copia el texto del cuadro a mano.', 'info')
   }
 }
-
-function elegirFoto(id: number): void {
-  clientPhotoId.value = id
-  pendingFile.value = null
-  preview.value = null
-}
-
-function elegirArchivo(file: File): void {
-  pendingFile.value = file
-  clientPhotoId.value = null
-  preview.value = URL.createObjectURL(file)
-}
-
-function quitarImagen(): void {
-  pendingFile.value = null
-  clientPhotoId.value = null
-  preview.value = null
-}
 </script>
 
 <template>
@@ -266,13 +254,12 @@ function quitarImagen(): void {
         {{ post.error }}
       </p>
 
-      <PhotoPicker
-        :client-photo-id="clientPhotoId"
-        :current-url="preview"
+      <PostImages
+        v-model:keep="keepIds"
+        v-model:photos="newPhotoIds"
+        v-model:files="newFiles"
+        :images="post.images"
         :disabled="!editable || ocupado"
-        @pick-photo="elegirFoto"
-        @pick-file="elegirArchivo"
-        @clear="quitarImagen"
       />
 
       <NxTextarea

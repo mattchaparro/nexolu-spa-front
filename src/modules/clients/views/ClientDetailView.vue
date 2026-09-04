@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import { useSystemAlert } from '@/composables/useSystemAlert'
 import { useAuthStore } from '@/stores/auth.store'
+import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxInput } from '@/ui'
+
+import { useCreateFromPhotos } from '@/modules/social/composables/useSocialPosts'
 
 import {
   STATUS_LABELS,
@@ -16,6 +19,7 @@ import {
 } from '../composables/useClients'
 
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const { notify } = useSystemAlert()
 
@@ -25,6 +29,7 @@ const { mutateAsync: update, isPending: saving } = useUpdateClient()
 const { mutateAsync: upload, isPending: uploading } = useUploadPhoto()
 const { mutateAsync: removePhoto } = useDeletePhoto()
 const { mutateAsync: setConsent, isPending: savingConsent } = usePhotoConsent()
+const { mutateAsync: createPost, isPending: creatingPost } = useCreateFromPhotos()
 
 type Tab = 'historial' | 'fotos' | 'datos'
 const tab = ref<Tab>('historial')
@@ -46,6 +51,47 @@ const caption = ref('')
  * default, que es justo lo que no puede ser.
  */
 const consent = ref(false)
+
+/*
+ * Las fotos elegidas para una publicación.
+ *
+ * Sólo entran las que tienen permiso: seleccionar una sin él y descubrirlo al
+ * apretar el botón sería enseñar a la gente que el permiso es un trámite que
+ * el sistema resuelve solo.
+ */
+const paraPublicar = ref<number[]>([])
+
+const puedePublicar = computed(
+  () => auth.can('publicaciones.gestionar') && auth.hasFeature('social_posts'),
+)
+
+function alternarSeleccion(photoId: number): void {
+  paraPublicar.value = paraPublicar.value.includes(photoId)
+    ? paraPublicar.value.filter((id) => id !== photoId)
+    : [...paraPublicar.value, photoId]
+}
+
+/**
+ * De la foto del trabajo a la publicación, sin buscarla entre doscientas.
+ *
+ * Es el atajo que cierra el círculo: la manicurista la subió al cerrar el
+ * servicio, la clienta dijo que sí, y de acá sale el borrador — con el
+ * servicio y la sede de esa cita ya puestos.
+ */
+async function crearPublicacion(): Promise<void> {
+  if (!paraPublicar.value.length) return
+
+  try {
+    const post = await createPost(paraPublicar.value)
+
+    paraPublicar.value = []
+    // Se abre allá: el texto y la fecha se deciden en el calendario, no en la
+    // ficha de una clienta.
+    router.push({ name: 'social-posts', query: { abrir: String(post.id) } })
+  } catch (e) {
+    notify(extractErrorMessage(e, 'No pudimos crear la publicación.'), 'error')
+  }
+}
 
 watch(
   client,
@@ -363,6 +409,16 @@ function whatsappLink(c: {
           </label>
         </div>
 
+        <div
+          v-if="paraPublicar.length"
+          class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md bg-indigo-50 px-4 py-3"
+        >
+          <p class="text-sm text-indigo-900">
+            {{ paraPublicar.length }} foto(s) elegidas. Van en un solo carrusel, en este orden.
+          </p>
+          <NxButton :loading="creatingPost" @click="crearPublicacion">Crear publicación</NxButton>
+        </div>
+
         <p
           v-if="!client.photos.length"
           class="rounded-md bg-slate-100 px-4 py-6 text-sm text-slate-600"
@@ -377,6 +433,25 @@ function whatsappLink(c: {
             class="overflow-hidden rounded-lg border border-slate-200 bg-white"
           >
             <img :src="photo.url" :alt="photo.caption ?? ''" class="h-36 w-full object-cover" />
+
+            <!--
+              Sólo se pueden elegir las autorizadas: dejar marcar una sin
+              permiso y rebotarla al final enseñaría que el permiso es un
+              trámite que el sistema resuelve solo.
+            -->
+            <label
+              v-if="puedePublicar && photo.marketing_consent"
+              class="flex items-center gap-2 border-t border-slate-100 px-2 py-1 text-[11px] text-slate-600"
+            >
+              <input
+                type="checkbox"
+                class="size-3.5"
+                :checked="paraPublicar.includes(photo.id)"
+                :disabled="creatingPost"
+                @change="alternarSeleccion(photo.id)"
+              />
+              Publicar
+            </label>
             <figcaption class="p-2 text-xs">
               <p class="text-slate-700">
                 {{ photo.caption ?? photo.service_name ?? 'Sin descripción' }}

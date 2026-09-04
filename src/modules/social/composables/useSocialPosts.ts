@@ -17,6 +17,20 @@ import { httpClient } from '@/services/http/client'
 | docs/publicaciones.md en el API.
 */
 
+/**
+ * Una de las imágenes de una publicación.
+ *
+ * La PRIMERA es la portada: la única que se ve en la cuadrícula del perfil, y
+ * la que decide si alguien abre la publicación. Por eso el orden se manda
+ * explícito y la pantalla no reordena por su cuenta.
+ */
+export interface PostImage {
+  id: number
+  url: string | null
+  client_photo_id: number | null
+  from_client_photo: boolean
+}
+
 export interface SocialPost {
   id: number
   status: string
@@ -30,8 +44,9 @@ export interface SocialPost {
   hashtags: string[]
   /** Escrito por el asistente y todavía sin tocar por nadie. */
   written_by_assistant: boolean
+  images: PostImage[]
+  /** La portada, para las tarjetas del calendario. */
   image_url: string | null
-  from_client_photo: boolean
   service_name: string | null
   location_name: string | null
   subject_date: string | null
@@ -113,9 +128,20 @@ export interface PostDraft {
   hashtags?: string[]
   service_id?: number | null
   location_id?: number | null
-  client_photo_id?: number | null
   subject_date?: string | null
-  image?: File | null
+
+  /*
+   * Las imágenes se mandan como LISTA COMPLETA, no se parchean una por una:
+   * `keep_image_ids` son las que siguen —en el orden en que van— y las otras
+   * dos se agregan al final. Con endpoints separados para agregar, quitar y
+   * mover, quitar la del medio y reordenar las otras dos son tres llamadas,
+   * cualquiera falla a mitad, y queda un carrusel que nadie pidió.
+   *
+   * `undefined` en las tres = no se tocan las imágenes.
+   */
+  keep_image_ids?: number[]
+  client_photo_ids?: number[]
+  images?: File[]
 }
 
 /**
@@ -147,13 +173,48 @@ export function postFormData(draft: PostDraft): FormData {
 
   if (draft.service_id !== undefined) form.append('service_id', String(draft.service_id ?? ''))
   if (draft.location_id !== undefined) form.append('location_id', String(draft.location_id ?? ''))
-  if (draft.client_photo_id !== undefined) {
-    form.append('client_photo_id', String(draft.client_photo_id ?? ''))
-  }
   if (draft.subject_date !== undefined) form.append('subject_date', draft.subject_date ?? '')
-  if (draft.image) form.append('image', draft.image)
+
+  /*
+   * Lista vacía con centinela, por lo mismo que los hashtags: un arreglo
+   * vacío no escribe NADA en un FormData, así que sin él "quitar todas las
+   * imágenes" llegaría como "no me mandaste el campo" y el servidor las
+   * conservaría. Quedarse sin poder vaciar el carrusel es peor que la fealdad
+   * de esta línea.
+   */
+  if (draft.keep_image_ids !== undefined) {
+    if (draft.keep_image_ids.length === 0) {
+      form.append('keep_image_ids[]', '')
+    } else {
+      draft.keep_image_ids.forEach((id) => form.append('keep_image_ids[]', String(id)))
+    }
+  }
+
+  draft.client_photo_ids?.forEach((id) => form.append('client_photo_ids[]', String(id)))
+  draft.images?.forEach((file) => form.append('images[]', file))
 
   return form
+}
+
+/**
+ * «Crear publicación» desde las fotos de un servicio.
+ *
+ * Cierra el círculo del módulo: la foto se tomó al cerrar el servicio, la
+ * clienta dio permiso, y de ahí sale el borrador — con el servicio y la sede
+ * de esa cita ya puestos.
+ */
+export function useCreateFromPhotos() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (clientPhotoIds: number[]) =>
+      (
+        await httpClient.post<{ post: SocialPost }>('/social-posts/from-photos', {
+          client_photo_ids: clientPhotoIds,
+        })
+      ).data.post,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: KEY }),
+  })
 }
 
 export function useSavePost() {
