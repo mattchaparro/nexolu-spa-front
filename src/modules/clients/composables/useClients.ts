@@ -38,6 +38,14 @@ export interface ClientPhoto {
   caption: string | null
   date: string
   service_name: string | null
+  /**
+   * La clienta autorizó que esta foto salga en las redes del negocio.
+   *
+   * Es lo ÚNICO que la hace publicable. Que se vea muy bien o que «total, no
+   * se le ve la cara» no son permisos, y el módulo de publicaciones sólo ve
+   * las que tienen esto en `true`.
+   */
+  marketing_consent: boolean
 }
 
 export interface ClientStats {
@@ -129,20 +137,55 @@ export function useUploadPhoto() {
       file,
       caption,
       appointmentItemId,
+      marketingConsent,
     }: {
       clientId: number
       file: File
       caption?: string
       appointmentItemId?: number | null
+      /** «¿Te puedo publicar esta foto?». Ausente = no. */
+      marketingConsent?: boolean
     }) => {
       const form = new FormData()
       form.append('photo', file)
       if (caption) form.append('caption', caption)
       if (appointmentItemId) form.append('appointment_item_id', String(appointmentItemId))
 
+      /*
+       * Se pregunta ACÁ, al subir la foto, porque es cuando la clienta está
+       * enfrente mirándose las manos. Volver a buscarla dos semanas después,
+       * cuando alguien arma el calendario, es como se termina publicando sin
+       * preguntar.
+       */
+      if (marketingConsent) form.append('marketing_consent', '1')
+
       return (await httpClient.post(`/clients/${clientId}/photos`, form)).data
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clients', 'profile'] }),
+  })
+}
+
+/**
+ * Anotar o retirar el permiso de publicación de una foto.
+ *
+ * Se puede retirar en cualquier momento y sin explicaciones: quien dijo que sí
+ * en marzo puede no querer en junio, y la única forma de que eso sea cierto es
+ * que quitarlo sea tan fácil como ponerlo. Al retirarlo, el servidor descarta
+ * las publicaciones de esa foto que todavía no salieron.
+ */
+export function usePhotoConsent() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, allowed }: { id: number; allowed: boolean }) =>
+      (await httpClient.post(`/clients/photos/${id}/marketing-consent`, { allowed })).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients', 'profile'] })
+      // El listado de fotos publicables cambió: si no se invalida, la
+      // pantalla de publicaciones sigue ofreciendo una foto cuyo permiso
+      // acaban de retirar.
+      queryClient.invalidateQueries({ queryKey: ['social-posts'] })
+    },
   })
 }
 

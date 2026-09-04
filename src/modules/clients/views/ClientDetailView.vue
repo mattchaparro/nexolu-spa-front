@@ -10,6 +10,7 @@ import {
   STATUS_LABELS,
   useClientProfile,
   useDeletePhoto,
+  usePhotoConsent,
   useUpdateClient,
   useUploadPhoto,
 } from '../composables/useClients'
@@ -23,6 +24,7 @@ const { data: client, isLoading } = useClientProfile(id)
 const { mutateAsync: update, isPending: saving } = useUpdateClient()
 const { mutateAsync: upload, isPending: uploading } = useUploadPhoto()
 const { mutateAsync: removePhoto } = useDeletePhoto()
+const { mutateAsync: setConsent, isPending: savingConsent } = usePhotoConsent()
 
 type Tab = 'historial' | 'fotos' | 'datos'
 const tab = ref<Tab>('historial')
@@ -34,6 +36,16 @@ const email = ref('')
 const notes = ref('')
 const careNotes = ref('')
 const caption = ref('')
+
+/*
+ * «¿Te puedo publicar esta foto?».
+ *
+ * Arranca APAGADO en cada subida y no recuerda la respuesta anterior: el
+ * permiso es de la clienta que está enfrente ahora, no una preferencia del
+ * negocio. Una casilla que se queda marcada convierte un permiso en un
+ * default, que es justo lo que no puede ser.
+ */
+const consent = ref(false)
 
 watch(
   client,
@@ -89,10 +101,31 @@ async function onFile(event: Event): Promise<void> {
   const file = (event.target as HTMLInputElement).files?.[0]
   if (!file) return
 
-  await upload({ clientId: id.value, file, caption: caption.value.trim() || undefined })
+  await upload({
+    clientId: id.value,
+    file,
+    caption: caption.value.trim() || undefined,
+    marketingConsent: consent.value,
+  })
   caption.value = ''
+  consent.value = false
   ;(event.target as HTMLInputElement).value = ''
   notify('Foto agregada.', 'success')
+}
+
+/** Anotar o retirar el permiso de una foto que ya está en la ficha. */
+async function togglePermiso(photoId: number, allowed: boolean): Promise<void> {
+  if (
+    !allowed &&
+    !window.confirm(
+      '¿Retirar el permiso? La foto sale de las publicaciones que todavía no se han publicado.',
+    )
+  ) {
+    return
+  }
+
+  await setConsent({ id: photoId, allowed })
+  notify(allowed ? 'Se puede publicar.' : 'Permiso retirado.', 'success')
 }
 
 async function deletePhoto(photoId: number): Promise<void> {
@@ -317,6 +350,17 @@ function whatsappLink(c: {
             :disabled="uploading"
             @change="onFile"
           />
+
+          <!--
+            El permiso se pide ACÁ, mientras la clienta está enfrente
+            mirándose las manos. Preguntarle dos semanas después, cuando
+            alguien arma el calendario, es como se termina publicando sin
+            preguntar.
+          -->
+          <label class="flex items-center gap-2 pb-2 text-sm text-slate-600">
+            <input v-model="consent" type="checkbox" class="size-4" :disabled="uploading" />
+            Puedo publicarla en las redes
+          </label>
         </div>
 
         <p
@@ -348,6 +392,21 @@ function whatsappLink(c: {
                   Eliminar
                 </button>
               </div>
+
+              <button
+                v-if="auth.can('clientes.gestionar')"
+                type="button"
+                class="mt-1.5 w-full rounded px-1.5 py-1 text-left text-[11px]"
+                :class="
+                  photo.marketing_consent
+                    ? 'bg-emerald-50 text-emerald-800'
+                    : 'bg-slate-100 text-slate-500'
+                "
+                :disabled="savingConsent"
+                @click="togglePermiso(photo.id, !photo.marketing_consent)"
+              >
+                {{ photo.marketing_consent ? '✓ Se puede publicar' : 'Sin permiso para publicar' }}
+              </button>
             </figcaption>
           </figure>
         </div>
