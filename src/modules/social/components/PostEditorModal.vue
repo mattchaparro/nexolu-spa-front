@@ -11,8 +11,10 @@ import {
   useComposePost,
   useDiscardPost,
   useMarkPublished,
+  usePublishNow,
   useSavePost,
   useSchedulePost,
+  type InstagramState,
   type SocialAngle,
   type SocialPost,
 } from '../composables/useSocialPosts'
@@ -33,6 +35,7 @@ import {
 const props = defineProps<{
   post: SocialPost | null
   angles: SocialAngle[]
+  instagram: InstagramState
 }>()
 
 const emit = defineEmits<{ close: [] }>()
@@ -45,6 +48,7 @@ const { mutateAsync: save, isPending: saving } = useSavePost()
 const { mutateAsync: compose, isPending: composing } = useComposePost()
 const { mutateAsync: schedule, isPending: scheduling } = useSchedulePost()
 const { mutateAsync: markPublished, isPending: publishing } = useMarkPublished()
+const { mutateAsync: publishNow, isPending: sending } = usePublishNow()
 const { mutateAsync: discard } = useDiscardPost()
 
 const caption = ref('')
@@ -69,7 +73,19 @@ const hora = ref('10:00')
 const abierto = computed(() => props.post !== null)
 const editable = computed(() => ['draft', 'scheduled', 'ready'].includes(props.post?.status ?? ''))
 const ocupado = computed(
-  () => saving.value || composing.value || scheduling.value || publishing.value,
+  () => saving.value || composing.value || scheduling.value || publishing.value || sending.value,
+)
+
+/*
+ * Lo que Instagram rechazaría, dicho antes de apretar nada. Lo resuelve el
+ * servidor —la proporción se mide leyendo el archivo— y la pantalla sólo lo
+ * muestra: apretar un botón que ya sabemos que falla gasta cupo del límite
+ * diario de la cuenta.
+ */
+const rechazo = computed(() => props.post?.rejected_reason ?? null)
+
+const puedeMandar = computed(
+  () => props.instagram.can_publish && rechazo.value === null && props.post?.status !== 'published',
 )
 
 /*
@@ -202,6 +218,27 @@ async function programar(): Promise<void> {
   }
 }
 
+/**
+ * Publicar de verdad, contra Instagram.
+ *
+ * Se guarda primero: mandar sin guardar publicaría un texto distinto del que
+ * la persona tiene en pantalla.
+ */
+async function publicarAhora(): Promise<void> {
+  if (!props.post) return
+  if (!window.confirm('¿Publicarla en Instagram ahora?')) return
+
+  if (editable.value && !(await guardar())) return
+
+  try {
+    await publishNow(props.post.id)
+    notify('Publicada en Instagram.', 'success')
+    emit('close')
+  } catch (e) {
+    notify(extractErrorMessage(e, 'Instagram no la aceptó.'), 'error')
+  }
+}
+
 async function marcarPublicada(): Promise<void> {
   if (!props.post) return
 
@@ -252,6 +289,18 @@ async function copiar(): Promise<void> {
     <div v-if="post" class="flex flex-col gap-4">
       <p v-if="post.error" class="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
         {{ post.error }}
+      </p>
+
+      <!--
+        Lo que Instagram rechazaría, antes de intentarlo. Cuando lo rechaza
+        Meta, lo que vuelve es un código en inglés y ya se gastó cupo del
+        límite diario de la cuenta.
+      -->
+      <p
+        v-if="rechazo && instagram.can_publish"
+        class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800"
+      >
+        {{ rechazo }}
       </p>
 
       <PostImages
@@ -319,9 +368,19 @@ async function copiar(): Promise<void> {
         />
       </div>
 
-      <p v-if="editable" class="-mt-1 text-xs text-slate-500">
-        A esa hora aparece en «listas para publicar». El sistema no la publica solo: la vitrina del
-        negocio la abre una persona.
+      <!--
+        Lo que va a pasar a esa hora depende de si el negocio conectó su
+        cuenta, y decirlo cambia lo que la persona espera.
+      -->
+      <p v-if="editable && instagram.can_publish" class="-mt-1 text-xs text-slate-500">
+        A esa hora sale sola en Instagram, como
+        <span class="font-medium">@{{ instagram.username }}</span
+        >. Programarla es aprobarla.
+      </p>
+
+      <p v-else-if="editable" class="-mt-1 text-xs text-slate-500">
+        A esa hora aparece en «listas para publicar» y alguien la copia y la pega.
+        <template v-if="instagram.reason"> {{ instagram.reason }}</template>
       </p>
 
       <p v-else-if="post.published_at" class="text-xs text-slate-500">
@@ -363,8 +422,23 @@ async function copiar(): Promise<void> {
             Programar
           </NxButton>
 
+          <!--
+            Con cuenta conectada, publicar de verdad. Sin ella, marcar lo que
+            alguien ya pegó a mano — que es el modo por defecto del producto,
+            no un estado degradado.
+          -->
           <NxButton
-            v-if="post && post.status !== 'published'"
+            v-if="puedeMandar"
+            :loading="sending"
+            :disabled="ocupado"
+            @click="publicarAhora"
+          >
+            Publicar ahora
+          </NxButton>
+
+          <NxButton
+            v-else-if="post && post.status !== 'published'"
+            variant="secondary"
             :loading="publishing"
             :disabled="ocupado"
             @click="marcarPublicada"

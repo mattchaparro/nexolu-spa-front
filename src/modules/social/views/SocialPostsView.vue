@@ -12,6 +12,7 @@ import {
   usePlanPosts,
   useSavePost,
   useSocialBoard,
+  type InstagramState,
   type SocialPost,
 } from '../composables/useSocialPosts'
 
@@ -67,6 +68,21 @@ watch(
   { immediate: true },
 )
 const angles = computed(() => data.value?.angles ?? [])
+
+/*
+ * Sin conexión aún cargando, se asume lo conservador: sin cuenta. Mostrar
+ * «publica sola» un instante y después corregirlo es peor que no decir nada.
+ */
+const instagram = computed<InstagramState>(
+  () =>
+    data.value?.instagram ?? {
+      connected: false,
+      username: null,
+      can_publish: false,
+      expires_soon: false,
+      reason: null,
+    },
+)
 
 /** Lo que ya cumplió su hora y sigue sin salir. Es el único atraso posible. */
 const listas = computed(() => (data.value?.calendar ?? []).filter((p) => p.status === 'ready'))
@@ -127,6 +143,10 @@ async function nueva(): Promise<void> {
           Las ideas salen de lo que ya pasó acá: una foto de un trabajo con permiso de la clienta,
           un día con horas libres, un servicio que se dejó de vender. Tú decides cuáles valen y
           cuándo salen.
+          <template v-if="instagram.can_publish">
+            Salen solas como <span class="font-medium">@{{ instagram.username }}</span
+            >.
+          </template>
         </p>
       </div>
 
@@ -136,6 +156,21 @@ async function nueva(): Promise<void> {
         <NxButton :loading="creando" @click="nueva">Nueva</NxButton>
       </div>
     </header>
+
+    <!--
+      Un token que caduca no avisa: el día sesenta y uno las publicaciones
+      dejan de salir en silencio, y nadie revisa una cuenta que funcionaba.
+      Por eso el aviso va arriba de todo y diez días antes.
+    -->
+    <p
+      v-if="instagram.connected && (instagram.expires_soon || !instagram.can_publish)"
+      class="mb-6 rounded-md border-l-4 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+    >
+      {{
+        instagram.reason ??
+        'El permiso de Instagram caduca pronto. Hay que reconectar la cuenta para que las publicaciones sigan saliendo solas.'
+      }}
+    </p>
 
     <p v-if="isLoading" class="text-sm text-slate-500">Cargando…</p>
 
@@ -268,6 +303,11 @@ async function nueva(): Promise<void> {
       </div>
     </template>
 
-    <PostEditorModal :post="abierta" :angles="angles" @close="abierta = null" />
+    <PostEditorModal
+      :post="abierta"
+      :angles="angles"
+      :instagram="instagram"
+      @close="abierta = null"
+    />
   </section>
 </template>

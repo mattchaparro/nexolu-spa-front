@@ -55,6 +55,13 @@ export interface SocialPost {
   approved_by: string | null
   /** Tiene texto e imagen: lo mínimo para poder programarse. */
   is_complete: boolean
+  /**
+   * Lo que Instagram rechazaría, dicho antes de intentarlo.
+   *
+   * Lo resuelve el servidor: la proporción se mide leyendo el archivo, y eso
+   * la pantalla no lo puede saber.
+   */
+  rejected_reason: string | null
   error: string | null
 }
 
@@ -63,12 +70,29 @@ export interface SocialAngle {
   label: string
 }
 
+/**
+ * Cómo está la conexión con Instagram.
+ *
+ * El token no viaja, obviamente. Lo que viaja es si se puede publicar y, si no,
+ * por qué — «caducó» se arregla reconectando y «apagada» con un interruptor, y
+ * un «no se puede» a secas manda a buscar el problema equivocado.
+ */
+export interface InstagramState {
+  connected: boolean
+  username: string | null
+  can_publish: boolean
+  /** Le quedan pocos días: el panel avisa antes de que deje de servir. */
+  expires_soon: boolean
+  reason: string | null
+}
+
 export interface SocialBoard {
   /** Ideas sin fecha, esperando que alguien las mire. */
   tray: SocialPost[]
   /** Lo que ya tiene fecha o ya salió. */
   calendar: SocialPost[]
   counts: { tray: number; ready: number }
+  instagram: InstagramState
   angles: SocialAngle[]
 }
 
@@ -259,7 +283,24 @@ export function useSchedulePost() {
   })
 }
 
-/** "Ya la publiqué." Es el dato que el sistema no puede saber solo. */
+/**
+ * «Publícala ahora», contra Instagram de verdad.
+ *
+ * Sólo sirve si el negocio conectó su cuenta. Sin ella el camino sigue siendo
+ * copiar, pegar y marcar — que no es un modo degradado, es como opera un spa
+ * sus primeras semanas.
+ */
+export function usePublishNow() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (id: number) =>
+      (await httpClient.post<{ post: SocialPost }>(`/social-posts/${id}/publish`)).data.post,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: KEY }),
+  })
+}
+
+/** "Ya la publiqué", a mano. Es el dato que el sistema no puede saber solo. */
 export function useMarkPublished() {
   const queryClient = useQueryClient()
 
