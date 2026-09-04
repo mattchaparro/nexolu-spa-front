@@ -29,6 +29,23 @@ export interface Business {
     min_booking_notice_min: number
     min_cancellation_notice_min: number
     max_booking_horizon_days: number
+
+    /**
+     * Si al cerrar un servicio se le pide a quien atendió la foto del trabajo.
+     *
+     * Viene YA RESUELTA (política del negocio + bandera `client_history`): la
+     * pantalla necesita saber si preguntar, no interpretar una política.
+     */
+    asks_service_photo: boolean
+
+    /**
+     * Cuándo se pide el comprobante de pago.
+     *
+     * Sigue siendo política y no un booleano porque depende del medio de pago,
+     * que todavía no se ha elegido cuando esto se lee. La vista la cruza con
+     * `counts_as_cash` del método.
+     */
+    payment_proof_policy: 'none' | 'non_cash' | 'always'
   } | null
 }
 

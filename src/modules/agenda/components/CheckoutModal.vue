@@ -4,11 +4,13 @@ import { computed, ref, watch } from 'vue'
 import { usePaymentMethods } from '@/composables/usePaymentMethods'
 import { useAuthStore } from '@/stores/auth.store'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
+import { wantsPaymentProof } from '@/utils/wantsPaymentProof'
 import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 
 import StagePicker from './StagePicker.vue'
 
 import { useClientLoyalty } from '@/modules/settings/composables/useLoyalty'
+import { usePaymentProof } from '@/modules/mywork/composables/useMyWork'
 
 import {
   useCancelAppointment,
@@ -48,6 +50,7 @@ const error = ref<string | null>(null)
 const { data: methods } = usePaymentMethods()
 
 const { mutateAsync, isPending } = useCheckout()
+const { mutateAsync: uploadProof } = usePaymentProof()
 
 const subtotal = computed(
   () => props.appointment?.items.reduce((sum, item) => sum + item.price, 0) ?? 0,
@@ -175,6 +178,31 @@ function money(value: number): string {
   }).format(value)
 }
 
+/*
+ * El comprobante de lo que entró.
+ *
+ * Se pide sólo cuando el medio de pago NO cuenta como efectivo: el efectivo
+ * se cuenta en el cajón al cerrar el día y no necesita foto. Una
+ * transferencia no se puede contar, y sin comprobante el cierre cuadra contra
+ * lo que alguien dijo que entró — que es exactamente lo que el cierre existe
+ * para no hacer.
+ *
+ * La política la resuelve el backend (`payment_proof_policy`); acá sólo se
+ * cruza con el método elegido.
+ */
+const proofFile = ref<File | null>(null)
+
+const asksProof = computed(() =>
+  wantsPaymentProof(
+    auth.business?.scheduling_settings?.payment_proof_policy,
+    methods.value?.find((m) => m.id === paymentMethodId.value)?.counts_as_cash,
+  ),
+)
+
+function onProof(event: Event): void {
+  proofFile.value = (event.target as HTMLInputElement).files?.[0] ?? null
+}
+
 const canSubmit = computed(
   () => paymentMethodId.value !== null && discountValue.value <= subtotal.value && !isPending.value,
 )
@@ -194,10 +222,31 @@ async function submit(): Promise<void> {
       discount_reason: discountReason.value.trim() || undefined,
       loyalty_reward_id: premioElegido.value,
     })
-    emit('done')
   } catch (e) {
     error.value = extractErrorMessage(e, 'No pudimos registrar el cobro.')
+
+    return
   }
+
+  /*
+   * El comprobante DESPUÉS de cobrar, y sin poder tumbar el cobro.
+   *
+   * La plata es lo que importa: si la imagen falla —salió muy pesada, se cayó
+   * la red— el cobro ya quedó y se dice que falta el comprobante, en vez de
+   * bloquear una caja por una foto. Es el mismo criterio que con la foto del
+   * trabajo: se pide, no se exige.
+   */
+  if (proofFile.value) {
+    try {
+      await uploadProof({ appointmentId: props.appointment.id, file: proofFile.value })
+    } catch {
+      error.value = 'El cobro quedó registrado, pero el comprobante no se pudo subir.'
+
+      return
+    }
+  }
+
+  emit('done')
 }
 </script>
 
@@ -235,6 +284,25 @@ async function submit(): Promise<void> {
         label="Método de pago"
         :disabled="isPending"
       />
+
+      <!--
+        Sólo cuando el medio de pago no es efectivo. Es la foto que hoy viaja
+        por el grupo de WhatsApp junto a un texto que este sistema ya sabe.
+      -->
+      <div v-if="asksProof" class="rounded-md border border-slate-200 px-3 py-2">
+        <p class="text-sm text-slate-700">Comprobante de la transferencia</p>
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          capture="environment"
+          class="mt-1.5 text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm"
+          :disabled="isPending"
+          @change="onProof"
+        />
+        <p class="mt-1 text-xs text-slate-400">
+          Sin él, el cierre del día cuadra contra lo que alguien dijo que entró.
+        </p>
+      </div>
 
       <div class="flex gap-3">
         <div class="w-40">

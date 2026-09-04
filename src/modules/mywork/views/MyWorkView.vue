@@ -11,7 +11,8 @@ import { useMoney } from '@/modules/cash/composables/useMoney'
 import { toLocalDateIso } from '@/utils/toLocalDateIso'
 
 import WalkInModal from '../components/WalkInModal.vue'
-import { useMyWork } from '../composables/useMyWork'
+import WorkPhotoModal from '../components/WorkPhotoModal.vue'
+import { useMyWork, type PendingService } from '../composables/useMyWork'
 
 const auth = useAuthStore()
 const { notify } = useSystemAlert()
@@ -24,6 +25,7 @@ const { data: appointments } = useAppointments(today)
 
 const walkInOpen = ref(false)
 const toCheckout = ref<Appointment | null>(null)
+const toPhotograph = ref<PendingService | null>(null)
 
 const myResourceId = computed(() => data.value?.resource?.id ?? null)
 
@@ -35,6 +37,42 @@ function charge(appointmentId: number): void {
   } else {
     notify('No encontramos esa cita. Recarga la página.', 'warn')
   }
+}
+
+/*
+ * Los manejadores de dos sentencias van en FUNCIONES CON NOMBRE, no inline.
+ *
+ * Inline se escriben en una línea con punto y coma, y Prettier los parte en
+ * dos sin él — que el compilador de plantillas de Vue rechaza. Eso ya costó
+ * dos pantallas rotas en producción (ver el postmortem en TESTING.md), y una
+ * regla que depende de que nadie corra el formateador no es una regla.
+ */
+function onWalkInSaved(): void {
+  walkInOpen.value = false
+  notify('Servicio registrado.', 'success')
+}
+
+function onCharged(): void {
+  toCheckout.value = null
+  notify('Cobrado. La comisión quedó registrada.', 'success')
+}
+
+function onCancelled(): void {
+  toCheckout.value = null
+  notify('Cita cancelada.', 'success')
+}
+
+/** Hace cuánto quedó listo el trabajo, en palabras. */
+function endedLabel(pending: PendingService): string {
+  if (!pending.ended_at) return ''
+
+  const minutos = Math.round((Date.now() - new Date(pending.ended_at).getTime()) / 60000)
+
+  if (minutos < 60) return `hace ${minutos} min`
+
+  const horas = Math.floor(minutos / 60)
+
+  return `hace ${horas} h`
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -61,10 +99,7 @@ const STATUS_LABELS: Record<string, string> = {
 
     <p v-if="isLoading" class="text-sm text-slate-500">Cargando…</p>
 
-    <p
-      v-else-if="!data?.resource"
-      class="rounded-md bg-slate-100 px-4 py-6 text-sm text-slate-600"
-    >
+    <p v-else-if="!data?.resource" class="rounded-md bg-slate-100 px-4 py-6 text-sm text-slate-600">
       {{ data?.message ?? 'Tu usuario no está asociado a nadie de la agenda.' }}
     </p>
 
@@ -78,24 +113,44 @@ const STATUS_LABELS: Record<string, string> = {
         <p class="text-sm font-medium text-amber-900">
           {{ data.pending_checkout.length }} servicio(s) sin cobrar
         </p>
-        <div class="mt-2 flex flex-col gap-1">
+        <div class="mt-2 flex flex-col gap-2">
           <div
             v-for="pending in data.pending_checkout"
             :key="pending.id"
-            class="flex items-center justify-between gap-3 text-sm text-amber-900"
+            class="flex flex-wrap items-center justify-between gap-3 text-sm text-amber-900"
           >
             <span>
               <span class="tabular-nums">{{ pending.label }}</span>
               · {{ pending.client_name }} · {{ pending.service_name }}
+
+              <!--
+                "Terminó" y no "pendiente": mientras la clienta sigue en la
+                silla no hay nada atrasado, y pintarlo igual sería mentir
+                sobre el atraso. El servidor ya resolvió cuál es cuál.
+              -->
+              <span v-if="pending.is_done" class="text-xs text-amber-700">
+                · terminó {{ endedLabel(pending) }}
+              </span>
             </span>
-            <NxButton
-              v-if="auth.can('caja.cobrar')"
-              variant="outline"
-              size="sm"
-              @click="charge(pending.id)"
-            >
-              Cobrar
-            </NxButton>
+
+            <div class="flex gap-2">
+              <NxButton
+                v-if="pending.needs_photo"
+                variant="outline"
+                size="sm"
+                @click="toPhotograph = pending"
+              >
+                Subir foto
+              </NxButton>
+              <NxButton
+                v-if="auth.can('caja.cobrar')"
+                variant="outline"
+                size="sm"
+                @click="charge(pending.id)"
+              >
+                Cobrar
+              </NxButton>
+            </div>
           </div>
         </div>
       </div>
@@ -126,7 +181,10 @@ const STATUS_LABELS: Record<string, string> = {
         Mi agenda de hoy
       </h2>
 
-      <p v-if="!data.agenda.length" class="rounded-md bg-slate-100 px-4 py-6 text-sm text-slate-600">
+      <p
+        v-if="!data.agenda.length"
+        class="rounded-md bg-slate-100 px-4 py-6 text-sm text-slate-600"
+      >
         No tienes citas hoy.
       </p>
 
@@ -163,18 +221,20 @@ const STATUS_LABELS: Record<string, string> = {
       </div>
     </template>
 
+    <WorkPhotoModal :pending="toPhotograph" @close="toPhotograph = null" />
+
     <WalkInModal
       :open="walkInOpen"
       :my-resource-id="myResourceId"
       @close="walkInOpen = false"
-      @saved="walkInOpen = false; notify('Servicio registrado.', 'success')"
+      @saved="onWalkInSaved"
     />
 
     <CheckoutModal
       :appointment="toCheckout"
       @close="toCheckout = null"
-      @done="toCheckout = null; notify('Cobrado. La comisión quedó registrada.', 'success')"
-      @cancelled="toCheckout = null; notify('Cita cancelada.', 'success')"
+      @done="onCharged"
+      @cancelled="onCancelled"
     />
   </section>
 </template>
