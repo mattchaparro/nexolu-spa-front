@@ -159,6 +159,20 @@ export const routes: RouteRecordRaw[] = [
     meta: { permission: 'negocio.configurar' },
   },
   {
+    /*
+     * El calendario de publicaciones.
+     *
+     * Un permiso solo para todo el módulo: quien puede prepararlo puede
+     * programarlo y marcarlo publicado. Partirlo en ver y gestionar sería
+     * inventar una separación que ningún spa pidió — lo maneja una persona,
+     * casi siempre la dueña.
+     */
+    path: '/publicaciones',
+    name: 'social-posts',
+    component: () => import('@/modules/social/views/SocialPostsView.vue'),
+    meta: { permission: 'publicaciones.gestionar', feature: 'social_posts' },
+  },
+  {
     path: '/configuracion/campanas',
     name: 'campaigns',
     component: () => import('@/modules/settings/views/CampaignsView.vue'),

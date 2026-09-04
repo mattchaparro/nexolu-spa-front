@@ -122,6 +122,13 @@ const ITEMS: Array<NavItem & { permission?: string; onlyStaff?: boolean }> = [
     featureKey: 'online_booking',
   },
   {
+    label: 'Publicaciones',
+    icon: 'pi pi-images',
+    routeName: 'social-posts',
+    permission: 'publicaciones.gestionar',
+    featureKey: 'social_posts',
+  },
+  {
     label: 'Campañas',
     icon: 'pi pi-megaphone',
     routeName: 'campaigns',

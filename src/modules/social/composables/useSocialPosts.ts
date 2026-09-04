@@ -1,0 +1,219 @@
+import type { Ref } from 'vue'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
+
+import { httpClient } from '@/services/http/client'
+
+/*
+|------------------------------------------------------------------------------
+| Publicaciones en redes
+|------------------------------------------------------------------------------
+| La bandeja y el calendario vienen en UNA sola respuesta porque en pantalla van
+| juntos: dos cargas para pintar algo que se lee como una sola cosa obligarían a
+| la vista a coordinarlas, y a mostrar media pantalla mientras llega la otra.
+|
+| No hay mutación que publique, y no es un olvido: el sistema no publica. Lo que
+| hace el reloj del servidor es mover lo programado a «lista para publicar»
+| cuando llega su hora; la última tecla la toca una persona. Ver
+| docs/publicaciones.md en el API.
+*/
+
+export interface SocialPost {
+  id: number
+  status: string
+  status_label: string
+  angle: string
+  angle_label: string
+  source: 'auto' | 'manual'
+  /** De qué se trata, en una línea. Lo calcula el servidor. */
+  headline: string
+  caption: string | null
+  hashtags: string[]
+  /** Escrito por el asistente y todavía sin tocar por nadie. */
+  written_by_assistant: boolean
+  image_url: string | null
+  from_client_photo: boolean
+  service_name: string | null
+  location_name: string | null
+  subject_date: string | null
+  scheduled_for: string | null
+  published_at: string | null
+  approved_by: string | null
+  /** Tiene texto e imagen: lo mínimo para poder programarse. */
+  is_complete: boolean
+  error: string | null
+}
+
+export interface SocialAngle {
+  value: string
+  label: string
+}
+
+export interface SocialBoard {
+  /** Ideas sin fecha, esperando que alguien las mire. */
+  tray: SocialPost[]
+  /** Lo que ya tiene fecha o ya salió. */
+  calendar: SocialPost[]
+  counts: { tray: number; ready: number }
+  angles: SocialAngle[]
+}
+
+/** Una foto de la ficha que la clienta autorizó publicar. */
+export interface PublishablePhoto {
+  id: number
+  url: string
+  date: string
+  service_name: string | null
+}
+
+const KEY = ['social-posts']
+
+export function useSocialBoard(locationId?: Ref<number | null>) {
+  return useQuery({
+    queryKey: [...KEY, 'board', locationId ?? null],
+    queryFn: async () =>
+      (
+        await httpClient.get<SocialBoard>('/social-posts', {
+          params: { ...(locationId?.value ? { location_id: locationId.value } : {}) },
+        })
+      ).data,
+  })
+}
+
+/**
+ * Las fotos que SE PUEDEN publicar.
+ *
+ * El servidor filtra por consentimiento y no acepta parámetro para saltárselo,
+ * así que esta lista es literalmente todo lo disponible. Tampoco trae el nombre
+ * de la clienta: quien arma la publicación no lo necesita.
+ */
+export function usePublishablePhotos(enabled: Ref<boolean>) {
+  return useQuery({
+    queryKey: [...KEY, 'photo-pool'],
+    enabled: () => enabled.value,
+    queryFn: async () =>
+      (await httpClient.get<{ photos: PublishablePhoto[] }>('/social-posts/photo-pool')).data
+        .photos,
+  })
+}
+
+/** "Busca ideas ahora", para quien abre la pantalla y la encuentra vacía. */
+export function usePlanPosts() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async () =>
+      (await httpClient.post<{ proposed: number; message: string }>('/social-posts/plan')).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: KEY }),
+  })
+}
+
+export interface PostDraft {
+  angle?: string
+  caption?: string | null
+  hashtags?: string[]
+  service_id?: number | null
+  location_id?: number | null
+  client_photo_id?: number | null
+  subject_date?: string | null
+  image?: File | null
+}
+
+/**
+ * Guardar es POST, también al editar.
+ *
+ * El formulario manda multipart por la imagen y PHP no puebla `$_FILES` en un
+ * PUT — misma razón que en el catálogo. El `FormData` se arma acá y no en la
+ * vista: es el tipo de código que se rompe en silencio (el formulario dice
+ * "guardado", el servidor no cambia nada) y por eso tiene prueba propia.
+ */
+export function postFormData(draft: PostDraft): FormData {
+  const form = new FormData()
+
+  if (draft.angle) form.append('angle', draft.angle)
+
+  // `?? ''` y no `if (caption)`: borrar el texto es una edición válida, y
+  // saltársela dejaría el texto viejo en la base sin que nadie lo note.
+  if (draft.caption !== undefined) form.append('caption', draft.caption ?? '')
+
+  if (draft.hashtags) {
+    // Vacío explícito: sin esto, quitar todas las etiquetas no manda el
+    // campo y el servidor conserva las anteriores.
+    if (draft.hashtags.length === 0) {
+      form.append('hashtags[]', '')
+    } else {
+      draft.hashtags.forEach((tag) => form.append('hashtags[]', tag))
+    }
+  }
+
+  if (draft.service_id !== undefined) form.append('service_id', String(draft.service_id ?? ''))
+  if (draft.location_id !== undefined) form.append('location_id', String(draft.location_id ?? ''))
+  if (draft.client_photo_id !== undefined) {
+    form.append('client_photo_id', String(draft.client_photo_id ?? ''))
+  }
+  if (draft.subject_date !== undefined) form.append('subject_date', draft.subject_date ?? '')
+  if (draft.image) form.append('image', draft.image)
+
+  return form
+}
+
+export function useSavePost() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, ...draft }: { id?: number } & PostDraft) =>
+      (
+        await httpClient.post<{ post: SocialPost }>(
+          id ? `/social-posts/${id}` : '/social-posts',
+          postFormData(draft),
+        )
+      ).data.post,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: KEY }),
+  })
+}
+
+/** "Escríbeme el texto." Una publicación a la vez, y sólo cuando se pide. */
+export function useComposePost() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, extra }: { id: number; extra?: string }) =>
+      (await httpClient.post<{ post: SocialPost }>(`/social-posts/${id}/compose`, { extra })).data
+        .post,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: KEY }),
+  })
+}
+
+/** Aprobar: ponerle fecha y sacarla de la bandeja. */
+export function useSchedulePost() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, scheduledFor }: { id: number; scheduledFor: string }) =>
+      (
+        await httpClient.post<{ post: SocialPost }>(`/social-posts/${id}/schedule`, {
+          scheduled_for: scheduledFor,
+        })
+      ).data.post,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: KEY }),
+  })
+}
+
+/** "Ya la publiqué." Es el dato que el sistema no puede saber solo. */
+export function useMarkPublished() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (id: number) =>
+      (await httpClient.post<{ post: SocialPost }>(`/social-posts/${id}/published`)).data.post,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: KEY }),
+  })
+}
+
+export function useDiscardPost() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (id: number) => (await httpClient.delete(`/social-posts/${id}`)).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: KEY }),
+  })
+}
