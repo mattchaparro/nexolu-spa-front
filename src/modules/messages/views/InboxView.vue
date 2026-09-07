@@ -90,7 +90,7 @@ async function enviar() {
     await reply({ id: selectedId.value, body: draft.value.trim() })
     draft.value = ''
   } catch (e) {
-    notify(extractErrorMessage(e), 'error')
+    notify(extractErrorMessage(e, 'No pudimos enviar el mensaje.'), 'error')
   }
 }
 
@@ -101,7 +101,7 @@ async function devolverAlAgente() {
     await resumeAgent(selectedId.value)
     notify('El agente vuelve a contestar esta conversación.', 'success')
   } catch (e) {
-    notify(extractErrorMessage(e), 'error')
+    notify(extractErrorMessage(e, 'No pudimos devolverle la conversación al agente.'), 'error')
   }
 }
 
@@ -111,7 +111,7 @@ async function cerrarOAbrir() {
   try {
     await toggle(selectedId.value)
   } catch (e) {
-    notify(extractErrorMessage(e), 'error')
+    notify(extractErrorMessage(e, 'No pudimos cambiar el estado de la conversación.'), 'error')
   }
 }
 </script>
