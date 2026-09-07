@@ -37,12 +37,14 @@ const ITEMS: Array<NavItem & { permission?: string; onlyStaff?: boolean }> = [
     icon: 'pi pi-comments',
     routeName: 'inbox',
     permission: 'citas.ver',
+    badgeKey: 'inbox_unread',
   },
   {
     label: 'Mensajes',
     icon: 'pi pi-send',
     routeName: 'outbox',
     permission: 'citas.ver',
+    badgeKey: 'outbox_pending',
   },
   {
     label: 'Lista de espera',

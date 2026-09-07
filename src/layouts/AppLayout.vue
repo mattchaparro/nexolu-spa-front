@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import { useNavBadges } from '@/composables/useNavBadges'
 import { useNavItems } from '@/composables/useNavItems'
 import { useAuthStore } from '@/stores/auth.store'
 
@@ -9,6 +10,8 @@ const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 const { navItems } = useNavItems()
+const { badge } = useNavBadges()
+
 
 const returning = ref(false)
 const drawerOpen = ref(false)
@@ -21,6 +24,9 @@ const drawerOpen = ref(false)
  */
 const bottomItems = computed(() => navItems.value.slice(0, 4))
 const drawerItems = computed(() => navItems.value.slice(4))
+
+/** Si algo de lo que quedó en el cajón está esperando respuesta. */
+const pendienteEnElCajon = computed(() => drawerItems.value.some((i) => badge(i.badgeKey) > 0))
 
 // Navegar cierra el cajón. Sin esto queda abierto encima de la pantalla nueva.
 watch(() => route.fullPath, () => { drawerOpen.value = false })
@@ -97,7 +103,16 @@ async function backToPlatform(): Promise<void> {
             active-class="bg-indigo-50 font-medium text-indigo-700"
           >
             <i :class="item.icon" />
-            <span>{{ item.label }}</span>
+            <span class="flex-1">{{ item.label }}</span>
+
+            <!-- El numerito solo aparece cuando hay algo. Un "0" permanente
+                 se vuelve parte del decorado y deja de avisar nada. -->
+            <span
+              v-if="badge(item.badgeKey)"
+              class="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white"
+            >
+              {{ badge(item.badgeKey) }}
+            </span>
           </RouterLink>
         </nav>
 
@@ -149,7 +164,13 @@ async function backToPlatform(): Promise<void> {
             active-class="bg-indigo-50 font-medium text-indigo-700"
           >
             <i :class="item.icon" class="w-5 text-slate-400" />
-            <span>{{ item.label }}</span>
+            <span class="flex-1">{{ item.label }}</span>
+            <span
+              v-if="badge(item.badgeKey)"
+              class="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white"
+            >
+              {{ badge(item.badgeKey) }}
+            </span>
           </RouterLink>
 
           <div class="px-5 py-4">
@@ -186,7 +207,16 @@ async function backToPlatform(): Promise<void> {
         class="flex min-w-0 flex-1 flex-col items-center gap-0.5 py-2 text-[11px] text-slate-500"
         active-class="text-indigo-600"
       >
-        <i :class="item.icon" class="text-lg" />
+        <!-- En la barra inferior va un PUNTO y no el numero: el icono mide
+             lo que mide y un "12" encima lo tapa. Lo que hace falta saber
+             ahi es que hay algo, no cuanto. -->
+        <span class="relative">
+          <i :class="item.icon" class="text-lg" />
+          <span
+            v-if="badge(item.badgeKey)"
+            class="absolute -right-1.5 -top-0.5 h-2 w-2 rounded-full bg-emerald-500"
+          />
+        </span>
         <span class="max-w-full truncate px-1">{{ item.label }}</span>
       </RouterLink>
 
@@ -197,7 +227,16 @@ async function backToPlatform(): Promise<void> {
         :class="drawerOpen ? 'text-indigo-600' : 'text-slate-500'"
         @click="drawerOpen = !drawerOpen"
       >
-        <i class="pi pi-bars text-lg" />
+        <!-- El menu se filtra por permisos y por lo que el negocio contrato,
+             asi que WhatsApp no siempre cae en la barra: para quien lo tenga
+             en el cajon, el punto tiene que salir aca o no se entera. -->
+        <span class="relative">
+          <i class="pi pi-bars text-lg" />
+          <span
+            v-if="pendienteEnElCajon"
+            class="absolute -right-1.5 -top-0.5 h-2 w-2 rounded-full bg-emerald-500"
+          />
+        </span>
         <span>Más</span>
       </button>
     </nav>
