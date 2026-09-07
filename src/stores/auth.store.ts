@@ -46,6 +46,25 @@ export const useAuthStore = defineStore('auth', () => {
     setSession(data)
   }
 
+  /**
+   * Canjea una asercion de nexolu-auth por un token de Sanctum normal.
+   *
+   * El 403 es TERMINAL: significa que esa identidad no tiene cuenta aca (o
+   * no es de plataforma), y reintentar el SSO devolveria lo mismo. Quien
+   * llama no debe rebotar a nexolu-auth ante un 403 o el usuario queda en
+   * un bucle sin ver nunca un formulario.
+   */
+  async function exchangeAssertion(assertion: string): Promise<void> {
+    const { data } = await httpClient.post<AuthResponse>(
+      '/auth/sso/exchange',
+      { assertion, device_name: navigator.userAgent.slice(0, 100) },
+      // Corre dentro del guard del router: el interceptor no puede navegar
+      // por su cuenta o abortaria la navegacion en curso.
+      { skipAuthRedirect: true },
+    )
+    setSession(data)
+  }
+
   async function logout(): Promise<void> {
     try {
       await httpClient.post('/logout')
@@ -126,6 +145,7 @@ export const useAuthStore = defineStore('auth', () => {
     isSuperAdmin,
     isImpersonating,
     login,
+    exchangeAssertion,
     logout,
     fetchCurrentUser,
     clearSession,

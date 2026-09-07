@@ -1,5 +1,7 @@
+import { isAxiosError } from 'axios'
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
+import { ssoAssertion, ssoError } from '@/services/http/ssoAssertion'
 import { useAuthStore } from '@/stores/auth.store'
 
 /**
@@ -280,6 +282,34 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
+
+  // Antes que nada, incluido el chequeo de sesion: al volver de nexolu-auth
+  // todavia NO estamos autenticados (el token sale justo de este canje), asi
+  // que cualquier orden distinto rebotaria a login y tiraria la asercion.
+  const assertion = ssoAssertion.take()
+  if (assertion) {
+    try {
+      await auth.exchangeAssertion(assertion)
+      const pendingRoute = ssoAssertion.takePendingRoute()
+      if (pendingRoute && pendingRoute !== to.fullPath) {
+        return pendingRoute
+      }
+      // Sin ruta pretendida, la del guard de mas abajo: plataforma a lo
+      // suyo, negocio a la agenda.
+      return auth.isSuperAdmin ? { name: 'sa-dashboard' } : { name: 'agenda' }
+    } catch (error) {
+      // NO se rebota a nexolu-auth: alla la cookie sigue viva, emitiria otra
+      // asercion, volveria a fallar igual, y el usuario quedaria en un bucle
+      // infinito sin ver nunca un formulario.
+      auth.clearSession()
+      ssoError.value =
+        isAxiosError<{ message?: string }>(error) && error.response?.status === 403
+          ? (error.response.data?.message ?? 'Esa identidad no puede entrar aca.')
+          : 'No pudimos validar tu acceso con Nexolú. Intenta de nuevo.'
+
+      return to.name === 'login' ? undefined : { name: 'login' }
+    }
+  }
 
   if (to.meta.public) {
     return true

@@ -6,6 +6,19 @@ import { useFlashStore } from '@/stores/flash.store'
 
 import { tokenStorage } from './tokenStorage'
 
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    /**
+     * Deja que quien llama maneje el error sin que el interceptor navegue
+     * por su cuenta. Lo usa el canje SSO, que corre DENTRO del guard del
+     * router: un `router.push` desde el interceptor en medio de una
+     * navegacion la aborta, y ademas seria redundante porque el guard ya
+     * decide a donde ir.
+     */
+    skipAuthRedirect?: boolean
+  }
+}
+
 export const httpClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
   // Sin timeout, una peticion que se queda colgada (wifi que cae justo al
@@ -53,6 +66,10 @@ httpClient.interceptors.request.use((config) => {
 httpClient.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.config?.skipAuthRedirect) {
+      return Promise.reject(error)
+    }
+
     const status = error.response?.status
     const onLogin = router.currentRoute.value.name === 'login'
 

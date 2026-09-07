@@ -1,6 +1,12 @@
+import { stashSsoAssertionFromUrl } from '@/services/http/ssoAssertion'
 import { stashSsoTokenFromUrl } from '@/services/http/tokenStorage'
 
 stashSsoTokenFromUrl()
+// Al lado del de legacy y sin alterar su orden: leen parametros distintos
+// del fragmento (`token` el de arriba, `auth_token` este) justamente para
+// no pisarse. Los dos tienen que correr antes de que arranque el router,
+// que descarta el fragmento en su primera navegacion.
+stashSsoAssertionFromUrl()
 
 // Lato self-hosted via @fontsource, igual que el POS: continuidad de marca
 // entre productos sin depender de un host de fuentes externo.
