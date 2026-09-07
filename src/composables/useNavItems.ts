@@ -28,6 +28,16 @@ const ITEMS: Array<NavItem & { permission?: string; onlyStaff?: boolean }> = [
    * mensajería del negocio. Esconderla detrás de una bandera dejaría los avisos
    * preparados donde nadie los ve, que es exactamente lo que pasaba antes.
    */
+  /*
+   * La bandeja de WhatsApp va ANTES de "Mensajes": lo que una clienta escribio
+   * y espera respuesta pesa mas que lo que el sistema preparo para mandar.
+   */
+  {
+    label: 'WhatsApp',
+    icon: 'pi pi-comments',
+    routeName: 'inbox',
+    permission: 'citas.ver',
+  },
   {
     label: 'Mensajes',
     icon: 'pi pi-send',
