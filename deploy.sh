@@ -69,8 +69,23 @@ rollback() {
     verificar
 }
 
+# Subir una release. rsync si esta, tar sobre ssh si no.
+#
+# Git Bash en Windows -- que es donde se compila este front -- NO trae rsync,
+# y exigirlo dejaba el deploy sin correr en la unica maquina que puede
+# construirlo. tar comprime igual y va por el mismo ssh; lo que se pierde es
+# la transferencia incremental, y una release son dos megas.
+subir() {
+    local origen="$1" destino="$2"
+
+    if command -v rsync >/dev/null 2>&1; then
+        rsync -az --checksum "$origen/" "$SERVIDOR:$destino/"
+    else
+        tar -czf - -C "$origen" . | remoto "tar -xzf - -C '$destino'"
+    fi
+}
+
 desplegar() {
-    command -v rsync >/dev/null 2>&1 || fallar "hace falta rsync."
 
     log "1/5 Build local (vue-tsc + vite)"
     npm run build
@@ -83,7 +98,7 @@ desplegar() {
     log "2/5 Subiendo release $release"
     remoto "mkdir -p '$APP_DIR/releases/$release'"
     # Sin --delete: cada release es un directorio nuevo y vacio.
-    rsync -az --checksum dist/ "$SERVIDOR:$APP_DIR/releases/$release/"
+    subir dist "$APP_DIR/releases/$release"
 
     log "3/5 Verificando lo subido antes de cambiar nada"
     remoto "test -f '$APP_DIR/releases/$release/index.html'" \
