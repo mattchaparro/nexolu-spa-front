@@ -15,9 +15,29 @@ import { httpClient } from '@/services/http/client'
 
 export type RewardType = 'discount_percent' | 'discount_amount' | 'free_service'
 
+/**
+ * Cómo premia la tarjeta.
+ *
+ * - `card`: junta N visitas, se lleva el premio, y vuelve a empezar. Los
+ *   sellos se gastan.
+ * - `ladder`: a las 5 un premio, a las 10 otro, a las 15 otro. Los sellos no
+ *   se gastan nunca.
+ */
+export type LoyaltyMode = 'card' | 'ladder'
+
+/** Un escalón de la escalera. Vacío en modo `card`. */
+export interface LoyaltyTier {
+  stamps_required: number
+  reward_type: RewardType
+  reward_value: number | null
+  reward_service_id: number | null
+  reward_label: string
+}
+
 export interface LoyaltyProgram {
   id: number
   name: string
+  mode: LoyaltyMode
   terms: string | null
   stamps_required: number
   reward_type: RewardType
@@ -28,6 +48,7 @@ export interface LoyaltyProgram {
   /** Visita mínima para ganar sello. 0 = toda visita cuenta. */
   min_ticket: number
   is_active: boolean
+  tiers: LoyaltyTier[]
 }
 
 export function useLoyaltyProgram() {
@@ -76,15 +97,35 @@ export interface LoyaltyCard {
   program: {
     id: number
     name: string
+    mode: LoyaltyMode
     terms: string | null
     stamps_required: number
+    /** En la escalera, el premio del SIGUIENTE hito -- no el del programa. */
     reward_label: string
     min_ticket: number
   } | null
   stamps: number
+  /**
+   * En la escalera, el siguiente hito -- no un total fijo.
+   *
+   * El backend los devuelve en los dos modos a propósito, para que la línea
+   * "7 de 10 sellos, le faltan 3" del cobro funcione igual sin ramificar acá.
+   */
   required: number
   remaining: number
   complete: boolean
+  /** La escalera completa, para pintarla. Vacío en modo `card`. */
+  tiers?: Array<{
+    stamps_required: number
+    reward_label: string
+    reached: boolean
+    status: 'available' | 'used' | 'expired' | null
+  }>
+  next_tier?: {
+    stamps_required: number
+    reward_label: string
+    stamps_away: number
+  } | null
   rewards: Array<{ id: number; label: string; unlocked_at: string | null }>
 }
 
