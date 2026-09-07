@@ -1,12 +1,17 @@
 import { stashSsoAssertionFromUrl } from '@/services/http/ssoAssertion'
 import { stashSsoTokenFromUrl } from '@/services/http/tokenStorage'
 
-stashSsoTokenFromUrl()
-// Al lado del de legacy y sin alterar su orden: leen parametros distintos
-// del fragmento (`token` el de arriba, `auth_token` este) justamente para
-// no pisarse. Los dos tienen que correr antes de que arranque el router,
-// que descarta el fragmento en su primera navegacion.
+// ANTES de stashSsoTokenFromUrl(), y el orden NO es indiferente: ese helper
+// llama a history.replaceState() para limpiar el fragmento en cuanto hay
+// uno, tenga o no un `token` dentro. Corriendo despues, la asercion ya no
+// existe y el sintoma es "el SSO no hace nada", sin error en ningun lado
+// (visto en vivo el 2026-09-07 contra nexolu-pos-front, que tiene el mismo
+// helper copiado).
+//
+// Al reves es seguro: este solo toca el fragmento si empieza por
+// `#auth_token=`, asi que el `#token=` del SSO legacy le pasa de largo.
 stashSsoAssertionFromUrl()
+stashSsoTokenFromUrl()
 
 // Lato self-hosted via @fontsource, igual que el POS: continuidad de marca
 // entre productos sin depender de un host de fuentes externo.
