@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
 import { useSystemAlert } from '@/composables/useSystemAlert'
 import { useLocations } from '@/modules/settings/composables/useLocations'
@@ -110,10 +110,82 @@ const { mutateAsync: reschedule } = useReschedule()
 
 const staff = computed(() => agenda.value?.days[0]?.resources ?? [])
 
+/*
+|------------------------------------------------------------------------------
+| El teléfono
+|------------------------------------------------------------------------------
+| En escritorio una columna por persona se lee bien. En un teléfono no: con
+| tres chicas cada columna queda de un centímetro, y hay que desplazarse a lo
+| ancho para saber qué pasa a las once.
+|
+| Así que en el teléfono la agenda del día es UNA sola grilla con todas las
+| citas, y arriba unos chips para filtrar por persona. Es la misma pregunta que
+| uno le hace a la agenda de pie en el mostrador: "¿qué hay ahora?", no "¿qué
+| tiene cada una?".
+*/
+const enTelefono = ref(false)
+
+/** `null` = todas. */
+const filtroPersona = ref<number | null>(null)
+
+let mq: MediaQueryList | null = null
+
+function sincronizarAncho(e: MediaQueryListEvent | MediaQueryList): void {
+  enTelefono.value = e.matches
+}
+
+onMounted(() => {
+  mq = window.matchMedia('(max-width: 767px)')
+  sincronizarAncho(mq)
+  mq.addEventListener('change', sincronizarAncho)
+})
+
+onUnmounted(() => mq?.removeEventListener('change', sincronizarAncho))
+
+/** La grilla unida: todas las citas del día en una sola columna. */
+const columnaUnida = computed(() => {
+  const day = agenda.value?.days?.[0]
+
+  if (!day) {
+    return null
+  }
+
+  const gente = day.resources
+
+  return {
+    key: 'todas',
+    label: 'Todas',
+    sublabel: `${gente.reduce((n, r) => n + r.appointments.length, 0)}`,
+    color: null,
+    date: day.date,
+    // Un bloque puede ser de cualquiera, así que dice de quién es.
+    showWho: true,
+    resource: {
+      id: 0,
+      name: 'Todas',
+      color: null,
+      /*
+       * Las ventanas y descansos se unen para que la franja gris de "fuera
+       * de horario" solo tape lo que NADIE trabaja. Con la unión de todas,
+       * si alguna está disponible la hora se ve disponible.
+       */
+      windows: gente.flatMap((r) => r.windows),
+      breaks: [],
+      appointments: gente.flatMap((r) =>
+        r.appointments.map((a) => ({ ...a, who: r.name })),
+      ),
+    },
+  }
+})
+
 /**
  * En vista de día una columna es una persona; en vista de semana, un día
  * de una sola persona. Mostrar la semana de todo el equipo a la vez daría
  * 21 columnas y ninguna se leería.
+ *
+ * En el teléfono, en vista de día, se unen todas en una -- salvo que haya un
+ * filtro puesto, que entonces es la columna de esa persona y se puede agendar
+ * tocando un hueco.
  */
 const columns = computed(() => {
   const days = agenda.value?.days ?? []
@@ -121,7 +193,17 @@ const columns = computed(() => {
   if (view.value === 'day') {
     const day = days[0]
 
-    return (day?.resources ?? []).map((resource) => ({
+    const personas = (day?.resources ?? []).filter(
+      (r) => filtroPersona.value === null || r.id === filtroPersona.value,
+    )
+
+    // Unida solo en el teléfono y sin filtro: con una persona elegida, su
+    // columna normal, que sí deja agendar tocando un hueco.
+    if (enTelefono.value && filtroPersona.value === null && columnaUnida.value) {
+      return [columnaUnida.value]
+    }
+
+    return personas.map((resource) => ({
       key: resource.id,
       label: resource.name,
       sublabel: `${resource.appointments.length}`,
@@ -170,6 +252,23 @@ function today(): void {
 }
 
 function onPick(payload: { date: string; resourceId: number; time: string }): void {
+  /*
+   * En la vista unida el hueco no es de nadie en particular -- la columna es
+   * de todas -- así que se abre el modal SIN persona y él la pregunta. Es
+   * mejor que no dejar agendar: quien está de pie en el mostrador mirando el
+   * hueco de las once es justo quien quiere ocuparlo.
+   */
+  if (payload.resourceId === 0) {
+    pick.value = {
+      date: payload.date,
+      resourceId: null,
+      resourceName: null,
+      time: payload.time,
+    }
+
+    return
+  }
+
   const resource = staff.value.find((r) => r.id === payload.resourceId)
 
   pick.value = {
@@ -311,6 +410,47 @@ function onOpen(appointment: GridAppointment): void {
         </div>
       </div>
     </header>
+
+    <!--
+      En el teléfono, en vista de día: una sola grilla con todas las citas y
+      estos chips para filtrar. Una columna por persona en una pantalla de
+      cinco pulgadas deja cada una de un centímetro, y obliga a desplazarse a
+      lo ancho para saber qué pasa a las once.
+
+      Sólo con más de una persona: filtrar entre una es ruido.
+    -->
+    <div
+      v-if="enTelefono && view === 'day' && staff.length > 1"
+      class="mb-3 flex flex-wrap gap-2 md:hidden"
+    >
+      <button
+        type="button"
+        class="rounded-full border px-3 py-1 text-sm"
+        :class="
+          filtroPersona === null
+            ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+            : 'border-slate-200 bg-white text-slate-600'
+        "
+        @click="filtroPersona = null"
+      >
+        Todas
+      </button>
+
+      <button
+        v-for="person in staff"
+        :key="person.id"
+        type="button"
+        class="rounded-full border px-3 py-1 text-sm"
+        :class="
+          filtroPersona === person.id
+            ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+            : 'border-slate-200 bg-white text-slate-600'
+        "
+        @click="filtroPersona = person.id"
+      >
+        {{ person.name }}
+      </button>
+    </div>
 
     <!-- En semana se mira a una persona a la vez: 7 días × 3 personas serían
          21 columnas y ninguna se leería. -->

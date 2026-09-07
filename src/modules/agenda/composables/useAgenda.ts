@@ -18,6 +18,11 @@ export interface GridAppointment {
   /** Incluye buffers: lo que el puesto queda realmente ocupado. */
   occupied_start: string
   occupied_end: string
+  /**
+   * Quién atiende. Lo pone la pantalla al unir las columnas en el teléfono,
+   * no el servidor: allá la cita ya viene colgada de su persona.
+   */
+  who?: string
 }
 
 export interface GridWindow {

@@ -11,6 +11,12 @@ const props = defineProps<{
     sublabel?: string
     color?: string | null
     resource: GridResource
+    /*
+     * En la vista unida del telefono un bloque puede ser de cualquiera, asi
+     * que tiene que decir de quien es. En las columnas por persona sobra: el
+     * encabezado ya lo dice.
+     */
+    showWho?: boolean
     date: string
   }>
   dayStart: string
@@ -233,6 +239,9 @@ function blockClass(appointment: GridAppointment): string {
             <p class="truncate font-medium">{{ appointment.client_name }}</p>
             <p class="truncate opacity-75">
               {{ appointment.start }} · {{ appointment.service_name }}
+            </p>
+            <p v-if="column.showWho" class="truncate text-[10px] opacity-60">
+              {{ appointment.who }}
             </p>
           </article>
         </div>
