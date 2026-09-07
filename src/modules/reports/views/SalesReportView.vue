@@ -189,6 +189,31 @@ function dayLabel(iso: string): string {
           </p>
           <p class="text-xs text-slate-500">{{ money(totals.cash) }} en efectivo</p>
         </article>
+
+        <!--
+          Sólo aparece cuando hay algo que mirar. Una tarjeta que dice "0
+          servicios cobrados distinto" todos los días se vuelve parte del
+          decorado, y el día que diga 3 nadie la va a ver.
+        -->
+        <article
+          v-if="totals.off_catalog?.count"
+          class="rounded-lg border border-amber-300 bg-amber-50 p-3"
+        >
+          <p class="text-xs uppercase tracking-wide text-amber-700">Cobrado fuera de carta</p>
+          <p class="mt-1 text-xl font-semibold tabular-nums text-amber-900">
+            {{ totals.off_catalog.count }}
+            {{ totals.off_catalog.count === 1 ? 'servicio' : 'servicios' }}
+          </p>
+          <p class="text-xs text-amber-800">
+            <span v-if="totals.off_catalog.above">{{ totals.off_catalog.above }} de más</span>
+            <span v-if="totals.off_catalog.above && totals.off_catalog.below"> · </span>
+            <span v-if="totals.off_catalog.below">{{ totals.off_catalog.below }} de menos</span>
+            ·
+            <span class="tabular-nums">
+              {{ totals.off_catalog.difference > 0 ? '+' : '' }}{{ money(totals.off_catalog.difference) }}
+            </span>
+          </p>
+        </article>
       </div>
 
       <!-- Por sede. Sólo con más de una: con un local, una tarjeta suelta que

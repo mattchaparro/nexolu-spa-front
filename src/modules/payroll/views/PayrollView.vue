@@ -56,7 +56,19 @@ const paymentMethodId = ref<number | null>(null)
 const notes = ref('')
 const error = ref<string | null>(null)
 
-const totalPending = computed(() => rows.value.reduce((sum, r) => sum + r.net_total, 0))
+/*
+ * El total lo suma el SERVIDOR, no esta pantalla.
+ *
+ * La lista puede venir filtrada por sede, y sumarla acá sería una segunda
+ * aritmética del mismo número: el día que las dos difieran, nadie va a saber
+ * cuál creer. Se cae a la suma local sólo mientras carga.
+ */
+const totalPending = computed(
+  () => pending.value?.total ?? rows.value.reduce((sum, r) => sum + r.net_total, 0),
+)
+
+/** Cuántas personas esperan pago. Es lo primero que se pregunta un viernes. */
+const conSaldo = computed(() => pending.value?.con_saldo ?? 0)
 
 function openConfirm(): void {
   error.value = null
@@ -110,6 +122,9 @@ const previewMessage = computed(() =>
       <div v-if="rows.length" class="text-right">
         <p class="text-xs uppercase tracking-wide text-slate-400">Total pendiente</p>
         <p class="text-2xl font-semibold text-slate-800">{{ money(totalPending) }}</p>
+        <p v-if="conSaldo" class="text-xs text-slate-500">
+          {{ conSaldo === 1 ? '1 persona espera pago' : `${conSaldo} personas esperan pago` }}
+        </p>
       </div>
     </header>
 

@@ -11,6 +11,20 @@ export interface SalesTotals {
   after_commission: number
   cash: number
   average_ticket: number
+  /**
+   * Servicios cobrados a un precio distinto al de la carta.
+   *
+   * Cambiar un precio es normal -- a veces el trabajo sale distinto de lo que
+   * dice la carta -- pero que nadie se entere no lo es. El descuento NO cuenta
+   * acá: ese va a nivel de la cita, con su motivo escrito.
+   */
+  off_catalog: {
+    count: number
+    above: number
+    below: number
+    /** Positivo = se cobró de más en total; negativo = de menos. */
+    difference: number
+  }
 }
 
 export interface SalesByPerson {

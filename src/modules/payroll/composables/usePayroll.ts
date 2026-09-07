@@ -137,6 +137,10 @@ export function usePendingPayroll(locationId?: Ref<number | null>) {
       (
         await httpClient.get<{
           until: string
+          /** Lo que se le debe a TODO el equipo, sumado en el servidor. */
+          total: number
+          /** Cuántas personas tienen algo pendiente. */
+          con_saldo: number
           resources: PendingRow[]
           locations: Array<{ id: number; name: string }>
         }>('/payroll/pending', {

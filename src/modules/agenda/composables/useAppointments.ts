@@ -140,6 +140,13 @@ export interface CheckoutPayload {
   discount_reason?: string
   /** Premio de la tarjeta de sellos que se usa hoy. */
   loyalty_reward_id?: number | null
+  /**
+   * Precio cobrado por línea, cuando se apartó del de la carta.
+   *
+   * Sólo las que cambiaron: mandar todas obligaría al servidor a distinguir
+   * "lo escribí igual" de "no lo toqué".
+   */
+  item_prices?: Record<number, number>
 }
 
 export function useCheckout() {

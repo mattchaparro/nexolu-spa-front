@@ -49,8 +49,36 @@ const { data: methods } = usePaymentMethods()
 
 const { mutateAsync, isPending } = useCheckout()
 
+/*
+|------------------------------------------------------------------------------
+| El precio cobrado
+|------------------------------------------------------------------------------
+| Se puede cambiar por línea, como en el sistema anterior: a veces el trabajo
+| sale distinto de lo que dice la carta -- una uña más, un retoque que no
+| estaba -- y obligar a que todo pase por "descuento" impide cobrar de más y
+| miente sobre lo que ocurrió.
+|
+| El precio de la carta NO se pierde: queda como `price` en la línea, y la
+| diferencia se ve después en la agenda y en el resumen del día. Cambiar un
+| precio es normal; que nadie se entere, no.
+*/
+
+/** Precio escrito por id de línea. Vacío = el de la carta. */
+const preciosEscritos = ref<Record<number, string>>({})
+
+function precioDe(item: { id: number; price: number }): number {
+  const escrito = preciosEscritos.value[item.id]
+
+  return escrito === undefined || escrito === '' ? item.price : Math.max(0, Number(escrito) || 0)
+}
+
+/** Las líneas cuyo precio se apartó de la carta. */
+const cambiados = computed(
+  () => (props.appointment?.items ?? []).filter((i) => precioDe(i) !== i.price),
+)
+
 const subtotal = computed(
-  () => props.appointment?.items.reduce((sum, item) => sum + item.price, 0) ?? 0,
+  () => props.appointment?.items.reduce((sum, item) => sum + precioDe(item), 0) ?? 0,
 )
 const discountValue = computed(() => Math.max(0, Number(discount.value) || 0))
 const total = computed(() => Math.max(0, subtotal.value - discountValue.value))
@@ -138,11 +166,13 @@ const commissions = computed(() => {
   const items = props.appointment?.items ?? []
 
   return items.map((item) => {
-    const share = subtotal.value > 0 ? (item.price / subtotal.value) * discountValue.value : 0
+    const cobrado = precioDe(item)
+    const share = subtotal.value > 0 ? (cobrado / subtotal.value) * discountValue.value : 0
+
     return {
       name: item.resource_name,
       rate: item.commission_rate ?? 0,
-      amount: (item.price - share) * (item.commission_rate ?? 0),
+      amount: (cobrado - share) * (item.commission_rate ?? 0),
     }
   })
 })
@@ -158,6 +188,9 @@ watch(open, (isOpen) => {
     // El premio NO se preselecciona: gastar la tarjeta de alguien sin que
     // nadie lo haya elegido es peor que olvidar ofrecerlo.
     premioElegido.value = null
+    // Los precios vuelven a los de la carta: lo que se escribió para otra
+    // cita no puede quedar colgado en ésta.
+    preciosEscritos.value = {}
   }
 })
 
@@ -191,6 +224,11 @@ async function submit(): Promise<void> {
       id: props.appointment.id,
       payment_method_id: paymentMethodId.value,
       discount_amount: discountValue.value || undefined,
+      // Solo las que de verdad cambiaron: mandar todas obligaría al servidor
+      // a distinguir "lo escribí igual" de "no lo toqué".
+      item_prices: cambiados.value.length
+        ? Object.fromEntries(cambiados.value.map((i) => [i.id, precioDe(i)]))
+        : undefined,
       discount_reason: discountReason.value.trim() || undefined,
       loyalty_reward_id: premioElegido.value,
     })
@@ -293,6 +331,51 @@ async function submit(): Promise<void> {
             Tócalo para aplicarlo a este cobro. Si no, queda guardado para la próxima.
           </p>
         </template>
+      </div>
+
+      <!--
+        El precio cobrado, por servicio.
+        Viene con el de la carta puesto: en la mayoría de los cobros nadie lo
+        toca, y quien lo toque está diciendo que el trabajo salió distinto.
+      -->
+      <div class="rounded-md border border-slate-200 px-4 py-3">
+        <p class="mb-2 text-xs uppercase tracking-wide text-slate-400">Servicios</p>
+
+        <div
+          v-for="item in appointment?.items ?? []"
+          :key="item.id"
+          class="flex items-center gap-3 border-b border-slate-50 py-2 last:border-0"
+        >
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-sm text-slate-800">{{ item.service_name }}</span>
+            <span class="block text-xs text-slate-500">
+              {{ item.resource_name }}
+              <span v-if="precioDe(item) !== item.price">
+                · carta {{ money(item.price) }}
+              </span>
+            </span>
+          </span>
+
+          <input
+            :value="preciosEscritos[item.id] ?? item.price"
+            type="number"
+            inputmode="numeric"
+            min="0"
+            class="w-28 rounded-md border px-2 py-1.5 text-right text-sm tabular-nums"
+            :class="
+              precioDe(item) !== item.price
+                ? 'border-amber-400 bg-amber-50 text-amber-900'
+                : 'border-slate-200'
+            "
+            :disabled="isPending"
+            @input="preciosEscritos[item.id] = ($event.target as HTMLInputElement).value"
+          />
+        </div>
+
+        <p v-if="cambiados.length" class="mt-2 text-xs text-amber-800">
+          {{ cambiados.length === 1 ? 'Un servicio se cobra' : `${cambiados.length} servicios se cobran` }}
+          distinto a la carta. Queda anotado.
+        </p>
       </div>
 
       <div class="rounded-md border border-slate-200 px-4 py-3 text-sm">
