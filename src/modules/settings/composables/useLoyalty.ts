@@ -13,7 +13,26 @@ import { httpClient } from '@/services/http/client'
 | reales y nadie se entera hasta el mostrador.
 */
 
-export type RewardType = 'discount_percent' | 'discount_amount' | 'free_service'
+/**
+ * Los premios que sabe entregar la tarjeta.
+ *
+ * La lista viene del backend con los campos que pide cada uno (ver
+ * `reward_types` en /loyalty/program), así que el formulario se arma leyendo
+ * esa respuesta y no ramificando acá. Un premio nuevo aparece solo.
+ */
+export type RewardType = 'discount_percent' | 'discount_amount' | 'free_service' | 'gift'
+
+/** Un tipo de premio, y qué necesita para poder entregarse. */
+export interface RewardTypeOption {
+  value: RewardType
+  label: string
+  /** Pide un número: el porcentaje, el monto. */
+  needs_value: boolean
+  /** Pide un servicio del catálogo. */
+  needs_service: boolean
+  /** Pide un texto que describa lo que se entrega. */
+  needs_note: boolean
+}
 
 /**
  * Cómo premia la tarjeta.
@@ -31,6 +50,8 @@ export interface LoyaltyTier {
   reward_type: RewardType
   reward_value: number | null
   reward_service_id: number | null
+  /** Qué se entrega, cuando el premio no es plata. */
+  reward_note: string | null
   reward_label: string
 }
 
@@ -43,6 +64,8 @@ export interface LoyaltyProgram {
   reward_type: RewardType
   reward_value: number | null
   reward_service_id: number | null
+  /** Qué se entrega, cuando el premio no es plata. */
+  reward_note: string | null
   /** Cómo se le explica el premio a quien lo va a recibir. */
   reward_label: string
   /** Visita mínima para ganar sello. 0 = toda visita cuenta. */
@@ -58,7 +81,7 @@ export function useLoyaltyProgram() {
       (
         await httpClient.get<{
           program: LoyaltyProgram | null
-          reward_types: Array<{ value: RewardType; label: string }>
+          reward_types: RewardTypeOption[]
         }>('/loyalty/program')
       ).data,
   })
