@@ -130,13 +130,14 @@ export const routes: RouteRecordRaw[] = [
   },
   {
     /*
-     * La bandeja de WhatsApp. Mismo permiso que el outbox: quien atiende el
-     * mostrador es quien contesta, y ya lo tiene.
+     * La bandeja de WhatsApp. Con `clientes.ver`: muestra el teléfono y el
+     * nombre de todas las clientas que han escrito, no solo las que uno
+     * atiende.
      */
     path: '/whatsapp',
     name: 'inbox',
     component: () => import('@/modules/messages/views/InboxView.vue'),
-    meta: { permission: 'citas.ver' },
+    meta: { permission: 'clientes.ver' },
   },
   {
     /*

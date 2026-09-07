@@ -29,14 +29,18 @@ const ITEMS: Array<NavItem & { permission?: string; onlyStaff?: boolean }> = [
    * preparados donde nadie los ve, que es exactamente lo que pasaba antes.
    */
   /*
-   * La bandeja de WhatsApp va ANTES de "Mensajes": lo que una clienta escribio
-   * y espera respuesta pesa mas que lo que el sistema preparo para mandar.
+   * La bandeja de WhatsApp va ANTES de "Mensajes": lo que una clienta escribió
+   * y espera respuesta pesa más que lo que el sistema preparó para mandar.
+   *
+   * Con `clientes.ver` y NO con `citas.ver`: la bandeja muestra el teléfono y
+   * el nombre de todas las clientas que han escrito, no solo las que uno
+   * atiende. Eso es la base de clientes del negocio.
    */
   {
     label: 'WhatsApp',
     icon: 'pi pi-comments',
     routeName: 'inbox',
-    permission: 'citas.ver',
+    permission: 'clientes.ver',
     badgeKey: 'inbox_unread',
   },
   {
