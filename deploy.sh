@@ -31,6 +31,33 @@ APP_DIR="${SPA_FRONT_APP_DIR:-/opt/nexolu/nexolu-spa-front}"
 URL="${SPA_FRONT_URL:-https://agenda.nexolu.co}"
 RETENER="${RETENER:-3}"
 
+# --- Build EN EL SERVIDOR -------------------------------------------------
+#
+# El repo clonado alla, del que sale el build.
+SRC_DIR="${SPA_FRONT_SRC_DIR:-/opt/nexolu/nexolu-spa-front-src}"
+
+NODE_IMAGE="${NODE_IMAGE:-node:22-alpine}"
+
+# Topes del contenedor de build. MEM_LIMIT es RAM real; MEM_SWAP_LIMIT es
+# RAM+swap junto (asi lo define Docker, no es swap adicional).
+#
+# Mas bajos que los de pos-front (1200m/2400m) a proposito: aquel droplet tiene
+# 2 GB para el solo, y este tiene 1,9 GB compartidos con el MySQL y el php-fpm
+# que sirven pos.nexolu.co en produccion. Con ~780 MB libres, pedir 1200 los
+# empuja a swap y el que se pone lento es el monolito.
+#
+# Si el build se pasa, muere SOLO EL contenedor: el deploy falla limpio y el
+# sitio sigue sirviendo la version anterior. Es justo lo que le falto a
+# pos-front el 2026-08-28, cuando un build sin tope colgo la maquina entera.
+MEM_LIMIT="${MEM_LIMIT:-700m}"
+MEM_SWAP_LIMIT="${MEM_SWAP_LIMIT:-1400m}"
+NODE_HEAP_MB="${NODE_HEAP_MB:-512}"
+
+# Medio core. pos-front no lo necesita porque su droplet tiene dos; aca hay
+# UNO y lo comparte con el monolito en vivo. Sin tope, un build de un minuto
+# es un minuto de pos.nexolu.co lento.
+BUILD_CPUS="${BUILD_CPUS:-0.5}"
+
 log() { echo "[spa-front] $*"; }
 fallar() { echo "[spa-front] ERROR: $*" >&2; exit 1; }
 
@@ -130,6 +157,94 @@ verificar_env() {
     fi
 }
 
+# Publica una release ya construida EN EL SERVIDOR.
+#
+# Los mismos pasos que el modo local a partir de aqui: verificar antes de
+# tocar nada, cambiar `current` con un rename atomico, y no borrar nunca la
+# release que `current` o `previous` estan usando.
+publicar_desde() {
+    local origen="$1" release="$2"
+
+    log "4/6 Copiando a la release $release"
+    remoto "mkdir -p '$APP_DIR/releases/$release' && cp -a '$origen/.' '$APP_DIR/releases/$release/'"
+
+    log "5/6 Verificando antes de cambiar nada"
+    remoto "test -f '$APP_DIR/releases/$release/index.html'" \
+        || fallar "la release no tiene index.html; no se cambia current."
+
+    remoto "set -e; cd '$APP_DIR'; $APUNTAR
+        actual=\$(readlink -f current 2>/dev/null || true)
+        apuntar current '$APP_DIR/releases/$release'
+        [ -n \"\$actual\" ] && apuntar previous \"\$actual\" || apuntar previous '$APP_DIR/releases/$release'
+        chown -R www-data:www-data '$APP_DIR/releases/$release'"
+
+    log "6/6 Limpiando releases viejas (se conservan $RETENER)"
+    remoto "cd '$APP_DIR/releases'
+        protegidas=\"\$(readlink -f ../current 2>/dev/null | xargs -r basename) \$(readlink -f ../previous 2>/dev/null | xargs -r basename)\"
+        ls -1t | tail -n +$((RETENER + 1)) | while read -r vieja; do
+            case \" \$protegidas \" in *\" \$vieja \"*) continue ;; esac
+            rm -rf -- \"\$vieja\"
+        done"
+
+    log "Listo: release $release"
+    verificar
+}
+
+# Despliega compilando EN EL SERVIDOR, como hace pos-front.
+#
+# La diferencia que importa no es tecnica: es que el .env deja de vivir en el
+# portatil de quien despliega. Publicar un front al que le falta una variable
+# -- que fue el bug del 2026-09-07 -- deja de depender de que esa persona la
+# tenga en su maquina.
+#
+# El modo local sigue existiendo (`bash deploy.sh local`) por si el droplet
+# esta apretado o hay que publicar algo sin depender de el.
+desplegar_remoto() {
+
+    log "1/6 Actualizando el repo en el servidor"
+    remoto "cd '$SRC_DIR' && git fetch -q origin && git reset -q --hard origin/main"
+
+    log "2/6 Verificando el .env del servidor"
+
+    # La misma comprobacion que en local, pero sobre el .env con el que de
+    # verdad se compila, que ahora es el de alla.
+    local faltan
+    faltan="$(remoto "cd '$SRC_DIR' && for v in ${REQUERIDAS[*]}; do grep -qE \"^\${v}=.+\" .env || echo \"\$v\"; done")"
+
+    if [ -n "$faltan" ]; then
+        echo "[spa-front] ERROR: al .env de $SRC_DIR le faltan variables:" >&2
+        echo "$faltan" | sed 's/^/               /' >&2
+        echo "" >&2
+        echo "           Sin ellas la app compila igual y sale incompleta." >&2
+        exit 1
+    fi
+
+    log "3/6 Build en el servidor ($NODE_IMAGE, mem=$MEM_LIMIT, cpus=$BUILD_CPUS)"
+
+    # `nice`/`ionice` ademas del tope de CPU: mientras esto compila, quien
+    # tiene que seguir respondiendo rapido es pos.nexolu.co.
+    if ! remoto "cd '$SRC_DIR' && ionice -c3 nice -n 19 docker run --rm \
+        --name spa-front-build \
+        --user root \
+        --memory '$MEM_LIMIT' \
+        --memory-swap '$MEM_SWAP_LIMIT' \
+        --cpus '$BUILD_CPUS' \
+        -e NODE_OPTIONS='--max-old-space-size=$NODE_HEAP_MB' \
+        -e CI=true \
+        -v '$SRC_DIR':/app \
+        -w /app \
+        '$NODE_IMAGE' \
+        sh -c 'rm -rf dist && npm ci --no-audit --no-fund && npm run build'"
+    then
+        fallar "el build fallo (o lo mato el tope de memoria). NO se toco 'current': el sitio sigue sirviendo la version anterior."
+    fi
+
+    remoto "test -f '$SRC_DIR/dist/index.html'" \
+        || fallar "el build termino sin error pero no dejo dist/index.html."
+
+    publicar_desde "$SRC_DIR/dist" "$(date +%Y%m%d-%H%M%S)"
+}
+
 desplegar() {
 
     log "0/5 Verificando el .env"
@@ -173,8 +288,11 @@ desplegar() {
 }
 
 case "${1:-deploy}" in
-    deploy) desplegar ;;
+    # Por defecto se compila EN EL SERVIDOR: es donde vive el .env de
+    # produccion, y asi publicar no depende de la maquina de nadie.
+    deploy|remoto) desplegar_remoto ;;
+    local) desplegar ;;
     rollback) rollback ;;
     estado|status) estado ;;
-    *) fallar "uso: bash deploy.sh [deploy|rollback|estado]" ;;
+    *) fallar "uso: bash deploy.sh [deploy|local|rollback|estado]" ;;
 esac
