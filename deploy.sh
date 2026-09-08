@@ -85,7 +85,55 @@ subir() {
     fi
 }
 
+# Las variables que un build de PRODUCCION tiene que llevar horneadas.
+#
+# Vite las mete en el bundle al compilar: no se leen del servidor, no se pueden
+# corregir despues, y su ausencia NO da error -- la app compila igual y
+# simplemente le falta algo.
+#
+# El 2026-09-07 se publico un front sin VITE_AUTH_BASE_URL. La app quedo sin el
+# boton "Entrar con Nexolu" y quien entra siempre por ahi se quedo sin puerta,
+# sin un solo mensaje de error en ningun lado: el sintoma fue "no puedo entrar",
+# y el diagnostico tomo media hora.
+#
+# Por eso el deploy se detiene ANTES de compilar. Es la unica defensa: despues
+# de compilar ya no hay a quien preguntarle.
+REQUERIDAS=(
+    VITE_API_BASE_URL
+    VITE_AUTH_BASE_URL
+)
+
+verificar_env() {
+    [ -f .env ] || fallar "no hay .env. Copia .env.example y llenalo."
+
+    local faltan=()
+
+    for var in "${REQUERIDAS[@]}"; do
+        # Presente Y con valor: `VITE_X=` vacia compila igual y rompe igual.
+        if ! grep -qE "^${var}=.+" .env; then
+            faltan+=("$var")
+        fi
+    done
+
+    if [ ${#faltan[@]} -gt 0 ]; then
+        echo "[spa-front] ERROR: al .env le faltan variables que el build hornea:" >&2
+
+        for var in "${faltan[@]}"; do
+            echo "               $var" >&2
+        done
+
+        echo "" >&2
+        echo "           Sin ellas la app compila igual y sale a produccion incompleta," >&2
+        echo "           sin ningun error visible. Ver .env.example para los valores." >&2
+
+        exit 1
+    fi
+}
+
 desplegar() {
+
+    log "0/5 Verificando el .env"
+    verificar_env
 
     log "1/5 Build local (vue-tsc + vite)"
     npm run build
