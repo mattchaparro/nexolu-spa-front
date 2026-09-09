@@ -22,7 +22,37 @@ async function signOut(): Promise<void> {
   <!-- Fondo oscuro a proposito: es la senal mas barata de "no estas en un
        negocio, estas en la plataforma". Confundir los dos paneles es como
        alguien termina cambiandole la configuracion al spa equivocado. -->
-  <div class="flex min-h-screen bg-slate-900">
+  <div class="flex min-h-screen flex-col bg-slate-900 md:flex-row">
+    <!-- En el telefono la barra lateral no existe (`hidden md:flex`), asi que
+         sin esto el panel de plataforma quedaba SIN navegacion: ni forma de
+         llegar a Negocios o Flujos, ni de cerrar sesion. Se veia una sola
+         pantalla y se salia recargando la URL a mano.
+
+         Arriba y no abajo como en la app del negocio: aca son tres enlaces
+         que se visitan de vez en cuando, no las pestañas de todo el dia. -->
+    <header class="flex items-center justify-between px-4 py-3 md:hidden">
+      <span class="text-base font-bold tracking-tight text-white">
+        Nexolú <span class="font-light text-slate-400">Plataforma</span>
+      </span>
+
+      <button type="button" class="text-xs text-slate-400 underline" @click="signOut">
+        Cerrar sesión
+      </button>
+    </header>
+
+    <nav class="flex gap-2 border-b border-slate-800 px-3 pb-3 md:hidden">
+      <RouterLink
+        v-for="link in LINKS"
+        :key="link.routeName"
+        :to="{ name: link.routeName }"
+        class="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-300"
+        active-class="bg-slate-800 font-medium text-white"
+      >
+        <i :class="link.icon" />
+        <span>{{ link.label }}</span>
+      </RouterLink>
+    </nav>
+
     <aside class="hidden w-56 flex-col border-r border-slate-800 md:flex">
       <div class="px-5 py-6">
         <span class="text-lg font-bold tracking-tight text-white">Nexolú</span>

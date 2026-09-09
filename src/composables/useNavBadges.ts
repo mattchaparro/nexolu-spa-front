@@ -1,6 +1,9 @@
+import { computed } from 'vue'
+
 import { useQuery } from '@tanstack/vue-query'
 
 import { httpClient } from '@/services/http/client'
+import { useAuthStore } from '@/stores/auth.store'
 
 /*
 |------------------------------------------------------------------------------
@@ -24,7 +27,21 @@ export interface NavBadges {
 }
 
 export function useNavBadges() {
+  const auth = useAuthStore()
+
+  /*
+   * Solo dentro de un negocio.
+   *
+   * Un usuario de plataforma no tiene bandeja ni mensajes por mandar: no hay
+   * numerito que traerle, y pedirlo devuelve 403 -- que el interceptor
+   * convierte en "No tienes permiso para esta accion" sobre una pantalla que
+   * funciona perfectamente. El menu ya se pinta sin numeritos cuando esto no
+   * corre, que es justo lo que se quiere.
+   */
+  const habilitado = computed(() => auth.business !== null)
+
   const { data } = useQuery({
+    enabled: habilitado,
     queryKey: ['nav-badges'],
     queryFn: async () => (await httpClient.get<NavBadges>('/nav-badges')).data,
     /*
