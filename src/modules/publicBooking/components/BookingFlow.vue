@@ -5,6 +5,7 @@ import { extractErrorMessage } from '@/utils/extractErrorMessage'
 
 import MonthCalendar from './MonthCalendar.vue'
 import {
+  useChainSingleDay,
   useCreatePublicBooking,
   usePublicChain,
   usePublicDays,
@@ -72,6 +73,18 @@ const chainIds = ref<number[]>([])
 /** El paso 1 está armando una visita de varias cosas. */
 const armando = ref(false)
 const resourceId = ref<number | null>(null)
+/**
+ * "¿Prefieres que te atienda una sola persona?"
+ *
+ * Sólo aplica a una visita de varias partes. Antes esto no se preguntaba: la
+ * página elegía por su cuenta y avisaba con un símbolo diminuto (⇄) al lado de
+ * la hora, con la explicación en un `title` que en un teléfono no se ve nunca.
+ * La clienta se enteraba de que la atendían dos personas al llegar al local.
+ *
+ * `null` = todavía no eligió; `true` = una sola; `false` = le da igual con tal
+ * de tener más horas.
+ */
+const unaSola = ref<boolean | null>(null)
 const date = ref<string | null>(null)
 const startsAt = ref<string | null>(null)
 const chosenResourceId = ref<number | null>(null)
@@ -385,12 +398,100 @@ const FRANJAS = [
   { key: 'noche', label: 'Noche' },
 ] as const
 
-/** Las horas de la cadena agrupadas por franja, sin franjas vacías. */
-const chainByFranja = computed(() =>
-  FRANJAS.map((f) => ({
-    ...f,
-    slots: (chainData.value?.slots ?? []).filter((s) => franja(s.label) === f.key),
-  })).filter((f) => f.slots.length > 0),
+/**
+ * Una hora de la cadena la atiende UNA persona, o dos.
+ *
+ * Si la clienta pidió a alguien, "una sola" significa ESA persona: que la
+ * atienda una sola pero otra distinta no es lo que pidió.
+ */
+function esUnaSolaPersona(slot: PublicChainSlot): boolean {
+  return resourceId.value ? slot.preferred_honored === true : slot.same_person
+}
+
+/** Los nombres de quienes atienden esa hora, en orden y sin repetir. */
+function quienesAtienden(slot: PublicChainSlot): string[] {
+  return [...new Set(slot.legs.map((l) => l.resource_name))]
+}
+
+/*
+ * Las horas partidas en DOS grupos: con una sola persona, y repartidas.
+ *
+ * Antes iban todas juntas, ordenadas por franja del día, y la única señal de
+ * que la visita se partía entre dos manicuristas era un "⇄" diminuto al lado
+ * de la hora -- con la explicación en un `title`, que en un teléfono no existe.
+ * La clienta se enteraba al llegar al local.
+ *
+ * La franja del día se sigue viendo (la hora lo dice), pero lo que decide el
+ * orden ahora es lo que de verdad cambia la visita: quién la atiende.
+ */
+const chainGroups = computed(() => {
+  const todas = chainData.value?.slots ?? []
+
+  const unaSolaSlots = todas.filter(esUnaSolaPersona)
+  const repartidas = todas.filter((s) => !esUnaSolaPersona(s))
+
+  const grupos: Array<{
+    key: 'una' | 'dos'
+    title: string
+    hint: string
+    slots: PublicChainSlot[]
+  }> = []
+
+  if (unaSolaSlots.length) {
+    grupos.push({
+      key: 'una',
+      title: chosenResource.value
+        ? `Todo con ${chosenResource.value.name}`
+        : 'Todo con la misma persona',
+      hint: '',
+      slots: unaSolaSlots,
+    })
+  }
+
+  /*
+   * Si pidió una sola persona, lo repartido NO se esconde: se muestra debajo y
+   * dicho con todas las letras. Esconderlo dejaría el día vacío sin explicar
+   * por qué, y hay clientas a las que les da igual con tal de entrar hoy.
+   */
+  if (repartidas.length) {
+    grupos.push({
+      key: 'dos',
+      title: 'Entre dos personas',
+      hint: 'Una hace una parte y otra la otra, seguido y el mismo día.',
+      slots: repartidas,
+    })
+  }
+
+  return grupos
+})
+
+/**
+ * Ese día no hay ninguna hora con una sola persona, Y a ella le importa.
+ *
+ * A quien contestó "me da igual" no se le ofrece otro día: ya dijo que
+ * prefiere entrar cuando pueda, y proponerle esperar al jueves es discutirle
+ * la respuesta que acaba de dar.
+ */
+const soloRepartido = computed(
+  () =>
+    unaSola.value !== false &&
+    (chainData.value?.slots.length ?? 0) > 0 &&
+    !chainGroups.value.some((g) => g.key === 'una'),
+)
+
+/*
+ * El primer día que sí. Se pregunta SÓLO cuando el día elegido no tiene
+ * ninguna hora con una sola persona: calcular la cadena de varios días no es
+ * gratis y no hay por qué pagarlo en cada pantalla.
+ */
+const { data: otroDia, isFetching: cargandoOtroDia } = useChainSingleDay(
+  slug,
+  packageId,
+  date,
+  resourceId,
+  soloRepartido,
+  chainIds,
+  locationSlug,
 )
 
 const slotsByFranja = computed(() =>
@@ -483,8 +584,11 @@ function confirmChainServices(): void {
   step.value = 2
 }
 
-function pickResource(id: number | null): void {
+function pickResource(id: number | null, prefiereUnaSola: boolean | null = null): void {
   resourceId.value = id
+  // Pedir a alguien ES pedir una sola persona: quien elige a Marcela no está
+  // pidiendo que Marcela le haga la mitad.
+  unaSola.value = id !== null ? true : prefiereUnaSola
   date.value = null
   startsAt.value = null
   chosenChain.value = null
@@ -672,7 +776,6 @@ watch(armando, (activo) => {
   if (activo) filtro.value = null
 })
 
-
 /*
 |------------------------------------------------------------------------------
 | Abono
@@ -774,12 +877,28 @@ const depositAmount = computed(() => {
         </button>
 
         <div class="min-w-0 flex-1">
+          <!-- "Paso 2 de 4" dicho con palabras, ademas de la barra.
+               La barra sola no le dice a nadie cuanto falta: se ve bonita y no
+               se lee. Lo reporto el dueño mirando a sus clientas usarla. -->
+          <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            Paso {{ step }} de 4
+          </p>
           <p class="text-base font-semibold text-slate-900">{{ TITULOS[step - 1] }}</p>
           <p v-if="whatLabel" class="truncate text-xs text-slate-500">
             {{ whatLabel }}
             <span v-if="totalLabel">&nbsp;· {{ totalLabel }}</span>
             <span v-if="minutesLabel">&nbsp;· {{ minutesLabel }} min</span>
-            <span v-if="chosenResource">&nbsp;· con {{ chosenResource.name }}</span>
+            <!-- Ya elegida la hora manda LO QUE VA A PASAR, no lo que se
+                 prefería: seguir diciendo "con una sola persona" encima de una
+                 hora que eligió repartida es mentirle en el último paso. -->
+            <span v-if="chosenChain">
+              &nbsp;· con {{ quienesAtienden(chosenChain).join(' y ') }}
+            </span>
+            <span v-else-if="chosenResource">&nbsp;· con {{ chosenResource.name }}</span>
+            <!-- Y antes de elegir, lo que ELLA contestó y no lo que la página
+                 asume: decía "con quien esté disponible" incluso a quien
+                 acababa de pedir una sola persona. -->
+            <span v-else-if="step > 2 && unaSola === true">&nbsp;· con una sola persona</span>
             <span v-else-if="step > 2">&nbsp;· con quien esté disponible</span>
           </p>
         </div>
@@ -967,10 +1086,38 @@ const depositAmount = computed(() => {
 
     <!-- 2. Con quién -->
     <div v-else-if="step === 2" class="flex flex-col gap-3">
+      <!-- Con varios servicios se PREGUNTA, en vez de decidir por ella y
+           avisarle con un símbolo al lado de la hora. Es la parte de la visita
+           que más la sorprende: llegar y que la atiendan dos personas. -->
+      <p v-if="isChain" class="text-sm text-slate-600">
+        Elegiste {{ chainIds.length || 2 }} servicios. ¿Prefieres que te atienda una sola persona, o
+        te da igual si eso te da más horas para elegir?
+      </p>
+
+      <button
+        v-if="isChain"
+        type="button"
+        class="flex min-h-11 items-center gap-3 rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-left active:bg-emerald-100"
+        @click="pickResource(null, true)"
+      >
+        <span
+          class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white"
+        >
+          1
+        </span>
+        <span class="min-w-0 flex-1">
+          <span class="block font-medium text-emerald-900">Una sola persona para todo</span>
+          <span class="mt-0.5 block text-xs text-emerald-800">
+            Te mostramos primero las horas en que alguien puede con todo.
+          </span>
+        </span>
+        <span class="shrink-0 text-emerald-400">›</span>
+      </button>
+
       <button
         type="button"
         class="flex min-h-11 items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left active:bg-slate-50"
-        @click="pickResource(null)"
+        @click="pickResource(null, isChain ? false : null)"
       >
         <span
           class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500"
@@ -978,13 +1125,23 @@ const depositAmount = computed(() => {
           ✦
         </span>
         <span class="min-w-0 flex-1">
-          <span class="block font-medium text-slate-900">Quien esté disponible</span>
-          <span class="mt-0.5 block text-xs text-slate-500"
-            >Suele haber más horas para elegir.</span
-          >
+          <span class="block font-medium text-slate-900">
+            {{ isChain ? 'Me da igual, quiero más horas' : 'Quien esté disponible' }}
+          </span>
+          <span class="mt-0.5 block text-xs text-slate-500">
+            {{
+              isChain
+                ? 'Puede que una parte la haga una persona y la otra, otra.'
+                : 'Suele haber más horas para elegir.'
+            }}
+          </span>
         </span>
         <span class="shrink-0 text-slate-300">›</span>
       </button>
+
+      <p v-if="isChain" class="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        O pide a alguien
+      </p>
 
       <button
         v-for="person in resources"
@@ -1010,8 +1167,8 @@ const depositAmount = computed(() => {
       </button>
 
       <p v-if="isChain" class="text-xs text-slate-500">
-        Si esa persona no presta alguno de los servicios, te decimos quién toma esa parte en vez de
-        esconderte la hora.
+        Si esa persona no presta alguno de los servicios, te decimos quién toma esa parte y a qué
+        hora, en vez de esconderte el horario.
       </p>
     </div>
 
@@ -1068,36 +1225,78 @@ const depositAmount = computed(() => {
           <!-- Visita de varias partes: la hora es la de TODA la visita, no la
                del primer servicio. -->
           <template v-else-if="isChain">
-            <p v-if="!chainByFranja.length" class="text-sm text-slate-500">
+            <p v-if="!chainGroups.length" class="text-sm text-slate-500">
               Ese día no cabe todo lo que elegiste. Prueba con otro día o con menos servicios.
             </p>
 
-            <div v-for="grupo in chainByFranja" :key="grupo.key" class="mb-3">
-              <p class="mb-1.5 text-xs text-slate-400">{{ grupo.label }}</p>
-              <div class="flex flex-wrap gap-2">
+            <!-- Las horas se agrupan por QUIÉN atiende, no por franja del día.
+                 Antes la única señal de que la visita se partía entre dos
+                 manicuristas era un "⇄" al lado de la hora, explicado en un
+                 `title` que en un teléfono no se ve: la clienta se enteraba al
+                 llegar al local. -->
+            <div v-for="grupo in chainGroups" :key="grupo.key" class="mb-4">
+              <p
+                class="text-sm font-medium"
+                :class="grupo.key === 'una' ? 'text-emerald-800' : 'text-slate-800'"
+              >
+                {{ grupo.title }}
+              </p>
+              <p v-if="grupo.hint" class="mb-1.5 text-xs text-slate-500">{{ grupo.hint }}</p>
+
+              <div class="mt-1.5 flex flex-wrap gap-2">
                 <button
                   v-for="(slot, i) in grupo.slots"
                   :key="i"
                   type="button"
-                  class="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 active:bg-slate-50"
+                  class="min-h-11 rounded-xl border px-3 py-1.5 text-left text-sm active:bg-slate-50"
+                  :class="
+                    grupo.key === 'una'
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+                      : 'border-slate-200 bg-white text-slate-800'
+                  "
                   @click="pickChain(slot)"
                 >
-                  {{ slot.label }}
-                  <!-- Si se pidió a alguien, el ✓ es que se le respetó. Marcar
-                       en verde una hora que quedó entera con OTRA persona sería
-                       decirle que sí a algo que no pidió. -->
-                  <span
-                    v-if="resourceId ? slot.preferred_honored : slot.same_person"
-                    class="ml-0.5 text-xs text-emerald-600"
-                    title="Toda la visita con la misma persona"
-                  >
-                    ✓
-                  </span>
-                  <span v-else class="ml-0.5 text-xs text-amber-600" title="Cambia de persona">
-                    ⇄
+                  <span class="block font-medium">{{ slot.label }}</span>
+                  <!-- Los nombres, no un símbolo. Quien atiende es lo que la
+                       clienta quiere saber antes de tocar, no después. -->
+                  <span class="block text-[11px] opacity-80">
+                    {{ quienesAtienden(slot).join(' y ') }}
                   </span>
                 </button>
               </div>
+            </div>
+
+            <!-- "¿Y qué día me atiende una sola?" -- la pregunta que se hace
+                 quien está mirando un día que sólo ofrece visitas repartidas.
+                 Sin esto hay que ir tocando días uno por uno hasta acertar. -->
+            <div
+              v-if="soloRepartido"
+              class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
+            >
+              <p v-if="cargandoOtroDia">Buscando un día con una sola persona…</p>
+
+              <template v-else-if="otroDia?.date">
+                <p>
+                  Ese día te atienden entre dos.
+                  <b class="first-letter:uppercase">{{ dayLabel(otroDia.date) }}</b>
+                  hay
+                  {{ otroDia.count === 1 ? 'una hora' : `${otroDia.count} horas` }}
+                  con una sola persona.
+                </p>
+                <button
+                  type="button"
+                  class="mt-2 min-h-11 w-full rounded-xl border border-slate-900 bg-slate-900 px-3 text-sm font-medium text-white"
+                  @click="pickDay(otroDia.date)"
+                >
+                  Ver ese día
+                </button>
+              </template>
+
+              <p v-else>
+                En las próximas dos semanas no hay un día en que
+                {{ chosenResource ? chosenResource.name : 'una sola persona' }}
+                pueda con todo. Las horas de arriba sí caben, repartidas entre dos.
+              </p>
             </div>
           </template>
 
@@ -1184,9 +1383,19 @@ const depositAmount = computed(() => {
             <span v-if="pack && pack.discount > 0" class="text-emerald-700">
               · ahorras {{ money(pack.discount) }}
             </span>
-            <span v-else>· {{ chainMinutes }} min</span>
+            <!-- `minutesLabel` y no `chainMinutes`: en un combo la lista de
+                 servicios sueltos está vacía, así que acá salía "0 min". -->
+            <span v-else>· {{ minutesLabel }} min</span>
           </p>
           <p class="mt-1 first-letter:uppercase">{{ date ? dayLabel(date) : '' }}</p>
+
+          <!-- Dicho de frente antes del detalle. El renglón por servicio ya lo
+               decía, pero se lee como una lista de horas: quien va rápido no
+               registra que son dos nombres distintos. -->
+          <p v-if="quienesAtienden(chosenChain).length > 1" class="mt-1 font-medium text-slate-900">
+            Te atienden {{ quienesAtienden(chosenChain).join(' y ') }}
+          </p>
+
           <!-- Con quién queda cada parte, y por qué, antes de confirmar. Un
                cambio de persona que se descubre en el local es una discusión
                en el mostrador. -->

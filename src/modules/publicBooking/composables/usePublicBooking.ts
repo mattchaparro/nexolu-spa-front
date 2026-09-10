@@ -165,6 +165,18 @@ export interface PublicChainSlot {
   legs: PublicChainLeg[]
 }
 
+/**
+ * El primer día en que toda la visita cabe con una sola persona.
+ *
+ * `date` en `null` significa "no encontré ninguno en dos semanas", que es una
+ * respuesta y hay que poder decirla.
+ */
+export interface ChainSingleDay {
+  date: string | null
+  first_label: string | null
+  count: number
+}
+
 export interface PublicSlot {
   resource_id: number
   resource_name: string
@@ -329,6 +341,56 @@ export function usePublicChain(
               ...(resourceId.value ? { resource_id: resourceId.value } : {}),
               // La sede sí es filtro, a diferencia de la persona: nadie cruza
               // la ciudad entre el manicure y el pedicure.
+              ...conSede(locationSlug),
+            },
+          },
+        )
+      ).data,
+  })
+}
+
+/**
+ * "¿Y qué día me atiende una sola persona?"
+ *
+ * Se pide SOLO cuando hace falta -- `enabled` -- porque calcular la cadena de
+ * varios días no es gratis. Mientras el día elegido tenga alguna opción con
+ * una sola persona, esta consulta no sale.
+ */
+export function useChainSingleDay(
+  slug: Ref<string>,
+  packageId: Ref<number | null>,
+  from: Ref<string | null>,
+  resourceId: Ref<number | null>,
+  enabled: Ref<boolean>,
+  serviceIds?: Ref<number[]>,
+  locationSlug?: Ref<string | null>,
+) {
+  return useQuery({
+    queryKey: [
+      'public',
+      slug,
+      'chain-single-day',
+      packageId,
+      serviceIds ?? [],
+      from,
+      resourceId,
+      locationSlug ?? null,
+    ],
+    enabled: () =>
+      enabled.value &&
+      from.value !== null &&
+      (packageId.value !== null || (serviceIds?.value.length ?? 0) > 0),
+    queryFn: async () =>
+      (
+        await httpClient.get<ChainSingleDay>(
+          `/public/${slug.value}/availability/chain-single-day`,
+          {
+            params: {
+              ...(packageId.value
+                ? { package_id: packageId.value }
+                : { 'service_ids[]': serviceIds?.value ?? [] }),
+              from: from.value,
+              ...(resourceId.value ? { resource_id: resourceId.value } : {}),
               ...conSede(locationSlug),
             },
           },
