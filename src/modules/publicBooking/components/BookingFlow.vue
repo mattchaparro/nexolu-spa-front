@@ -4,6 +4,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 
 import MonthCalendar from './MonthCalendar.vue'
+import ServiceDetailModal from './ServiceDetailModal.vue'
 import {
   useChainSingleDay,
   useCreatePublicBooking,
@@ -736,11 +737,41 @@ const hayPopulares = computed(() => props.page.services.some((s) => s.is_popular
 const puedeFiltrar = computed(
   () =>
     props.page.services.length >= MINIMO_PARA_FILTRAR &&
-    (hayPopulares.value || categorias.value.length > 1),
+    (hayPopulares.value || categorias.value.length > 1 || packages.value.length > 0),
 )
 
-/** null = todos; 'populares' = los más pedidos; un número = esa categoría. */
-const filtro = ref<number | 'populares' | null>(null)
+/**
+ * El buscador aparece con el mismo criterio que los filtros.
+ *
+ * Con seis servicios no hay nada que buscar: la lista entera cabe en una
+ * pantalla y el campo sólo roba sitio y pide teclado.
+ */
+const puedeBuscar = computed(() => props.page.services.length >= MINIMO_PARA_FILTRAR)
+
+/**
+ * null = todos; 'populares'; 'combos'; un número = esa categoría.
+ *
+ * Los combos eran una lista fija encima de todo. Con cuatro combos y cuarenta
+ * servicios, eso es media pantalla que quien viene por un retoque de cejas
+ * tiene que pasar de largo cada vez. Como ficha ocupan una palabra.
+ */
+const filtro = ref<number | 'populares' | 'combos' | null>(null)
+
+/**
+ * Lo que escribió en el buscador.
+ *
+ * Cuarenta servicios no se recorren, se buscan. Y con las categorías de Luxury
+ * tampoco alcanza: "Manicure" sola tiene veintitrés.
+ */
+const busqueda = ref('')
+
+/** El servicio cuyo detalle se está mirando. `null` = ninguno. */
+const detalle = ref<PublicService | null>(null)
+
+/** Sin tildes y en minúsculas: nadie escribe "pestañas" con la ñ en un afán. */
+function normalizar(texto: string): string {
+  return texto.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+}
 
 /*
  * Se entra por "los más pedidos" cuando los hay: en un catálogo largo, lo que
@@ -756,10 +787,32 @@ watch(
 )
 
 const serviciosVisibles = computed(() => {
+  const texto = normalizar(busqueda.value.trim())
+
+  /*
+   * Buscar manda sobre el filtro: quien escribe "rubber" quiere el rubber,
+   * esté en la categoría que esté. Dejar el filtro puesto encima devuelve
+   * "no hay resultados" sobre un servicio que sí existe.
+   */
+  if (texto !== '') {
+    return props.page.services.filter(
+      (s) => normalizar(s.name).includes(texto) || normalizar(s.description ?? '').includes(texto),
+    )
+  }
+
+  // En "combos" la lista de servicios sueltos no va: manda la de arriba.
+  if (filtro.value === 'combos') return []
   if (!puedeFiltrar.value || filtro.value === null) return props.page.services
   if (filtro.value === 'populares') return props.page.services.filter((s) => s.is_popular)
 
   return props.page.services.filter((s) => s.category_id === filtro.value)
+})
+
+/** Los combos se ven en "todos" y en su propia ficha, no mientras se busca. */
+const combosVisibles = computed(() => {
+  if (busqueda.value.trim() !== '' || armando.value) return []
+
+  return filtro.value === null || filtro.value === 'combos' ? packages.value : []
 })
 
 watch(
@@ -918,13 +971,41 @@ const depositAmount = computed(() => {
 
     <!-- 1. Qué se va a hacer -->
     <div v-if="step === 1" class="flex flex-col gap-3">
+      <!-- Buscar va PRIMERO. Cuarenta servicios no se recorren, se buscan, y
+           con las categorías de Luxury tampoco alcanza: "Manicure" sola tiene
+           veintitrés. -->
+      <div v-if="puedeBuscar && !armando" class="relative">
+        <input
+          v-model="busqueda"
+          type="search"
+          inputmode="search"
+          placeholder="Buscar servicio…"
+          aria-label="Buscar servicio"
+          class="min-h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-9 text-base text-slate-900 placeholder:text-slate-400"
+        />
+        <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+          ⌕
+        </span>
+        <button
+          v-if="busqueda"
+          type="button"
+          class="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-lg text-slate-400 active:bg-slate-100"
+          aria-label="Borrar"
+          @click="busqueda = ''"
+        >
+          ×
+        </button>
+      </div>
+
       <!-- Los combos van primero y marcados: es lo que el negocio quiere
-           vender, y lo que le sale más barato a quien reserva. -->
-      <template v-if="packages.length">
+           vender, y lo que le sale más barato a quien reserva. Pero como
+           LISTA, no como muro: con "Combos" de ficha, quien viene por un
+           retoque de cejas ya no los pasa de largo cada vez. -->
+      <template v-if="combosVisibles.length">
         <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Combos</p>
 
         <button
-          v-for="combo in packages"
+          v-for="combo in combosVisibles"
           :key="`p${combo.id}`"
           type="button"
           class="flex min-h-11 items-center gap-3 rounded-xl border border-emerald-300 bg-emerald-50/60 p-3 text-left active:bg-emerald-100"
@@ -965,7 +1046,7 @@ const depositAmount = computed(() => {
 
       <!-- Los filtros: sólo con catálogo largo, y nunca mientras se arma una
            visita de varias partes. -->
-      <div v-if="puedeFiltrar && !armando" class="flex flex-wrap gap-2">
+      <div v-if="puedeFiltrar && !armando && !busqueda" class="flex flex-wrap gap-2">
         <button
           v-if="hayPopulares"
           type="button"
@@ -978,6 +1059,19 @@ const depositAmount = computed(() => {
           @click="filtro = 'populares'"
         >
           Los más pedidos
+        </button>
+        <button
+          v-if="packages.length"
+          type="button"
+          class="min-h-9 rounded-full border px-3 text-sm transition"
+          :class="
+            filtro === 'combos'
+              ? 'border-emerald-600 bg-emerald-600 text-white'
+              : 'border-emerald-300 bg-emerald-50 text-emerald-800'
+          "
+          @click="filtro = 'combos'"
+        >
+          Combos
         </button>
         <button
           type="button"
@@ -1059,7 +1153,10 @@ const depositAmount = computed(() => {
 
         <span class="min-w-0 flex-1">
           <span class="block font-medium text-slate-900">{{ item.name }}</span>
-          <span v-if="item.description" class="mt-0.5 block line-clamp-2 text-xs text-slate-500">
+          <!-- Una línea, no dos: con descripciones de hasta 393 caracteres,
+               dos líneas por servicio son cuarenta párrafos que nadie lee
+               mientras busca el suyo. Lo completo está en "Ver detalle". -->
+          <span v-if="item.description" class="mt-0.5 block truncate text-xs text-slate-500">
             {{ item.description }}
           </span>
           <span class="mt-1 block text-sm text-slate-700">
@@ -1067,8 +1164,36 @@ const depositAmount = computed(() => {
           </span>
         </span>
 
+        <!-- Un `span` y no un `button`: esta fila YA es un botón, y un botón
+             dentro de otro no es HTML válido -- el navegador lo saca del
+             padre y la fila deja de funcionar. `@click.stop` para que ver el
+             detalle no reserve el servicio. -->
+        <span
+          v-if="item.description && !armando"
+          role="button"
+          tabindex="0"
+          class="shrink-0 self-center rounded-lg border border-slate-200 px-2 py-1.5 text-[11px] text-slate-600 active:bg-slate-100"
+          @click.stop="detalle = item"
+          @keydown.enter.stop="detalle = item"
+        >
+          Ver<br />detalle
+        </span>
+
         <span v-if="!armando" class="shrink-0 text-slate-300">›</span>
       </button>
+
+      <!-- Buscó y no hay nada. Se dice, con el texto que escribió, y se le
+           ofrece salir del callejón sin tener que borrar letra por letra. -->
+      <div v-if="busqueda && !serviciosVisibles.length" class="py-6 text-center">
+        <p class="text-sm text-slate-500">No encontramos nada con «{{ busqueda }}».</p>
+        <button
+          type="button"
+          class="mt-2 min-h-11 rounded-xl border border-slate-200 px-4 text-sm text-slate-700 active:bg-slate-50"
+          @click="busqueda = ''"
+        >
+          Ver todos los servicios
+        </button>
+      </div>
 
       <button
         v-if="armando && chainIds.length"
@@ -1078,6 +1203,19 @@ const depositAmount = computed(() => {
       >
         Continuar · {{ money(chainTotal) }} · {{ chainMinutes }} min
       </button>
+
+      <ServiceDetailModal
+        v-if="detalle"
+        :service="detalle"
+        :currency="page.business.currency"
+        @close="detalle = null"
+        @book="
+          (id) => {
+            detalle = null
+            armando ? toggleChainService(id) : pickService(id)
+          }
+        "
+      />
 
       <p v-if="!page.services.length && !packages.length" class="text-sm text-slate-500">
         Este negocio todavía no ofrece reservas en línea. Escríbenos y te agendamos.

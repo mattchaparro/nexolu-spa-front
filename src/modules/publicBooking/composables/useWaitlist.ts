@@ -79,12 +79,8 @@ export function useWaitlistEntry(slug: Ref<string>, token: Ref<string>) {
 export function useTakeSlot(slug: Ref<string>, token: Ref<string>) {
   return useMutation({
     mutationFn: async (payload: { resource_id: number; starts_at: string }) =>
-      (
-        await httpClient.post<TakeResult>(
-          `/public/${slug.value}/cupo/${token.value}/take`,
-          payload,
-        )
-      ).data,
+      (await httpClient.post<TakeResult>(`/public/${slug.value}/cupo/${token.value}/take`, payload))
+        .data,
   })
 }
 

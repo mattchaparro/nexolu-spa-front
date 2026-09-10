@@ -3,7 +3,8 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import BookingFlow from '../components/BookingFlow.vue'
-import { usePublicPage } from '../composables/usePublicBooking'
+import ServiceDetailModal from '../components/ServiceDetailModal.vue'
+import { usePublicPage, type PublicService } from '../composables/usePublicBooking'
 
 const route = useRoute()
 const router = useRouter()
@@ -70,6 +71,9 @@ const verTodos = ref(0)
 const VITRINA_COMPLETA_HASTA = 6
 
 const catalogo = computed(() => page.value?.services ?? [])
+
+/** El servicio cuyo detalle se está mirando. */
+const detalle = ref<PublicService | null>(null)
 
 const vitrinaRecortada = computed(
   () => catalogo.value.length > VITRINA_COMPLETA_HASTA && catalogo.value.some((s) => s.is_popular),
@@ -319,12 +323,24 @@ const groupedHours = computed(() => {
                 />
                 <div class="min-w-0 flex-1">
                   <p class="font-medium text-slate-800">{{ item.name }}</p>
-                  <p v-if="item.description" class="mt-0.5 text-sm text-slate-500">
+                  <!-- Recortada. Las descripciones de Luxury promedian 169
+                       caracteres y llegan a 393: puestas enteras, la vitrina
+                       es una pared de texto que hay que rodar para llegar a
+                       lo que uno vino a hacer. Completa, en "Ver detalle". -->
+                  <p v-if="item.description" class="mt-0.5 line-clamp-2 text-sm text-slate-500">
                     {{ item.description }}
                   </p>
                   <p class="mt-1 text-sm text-slate-600">
                     {{ money(item.price, page.business.currency) }} · {{ item.duration_min }} min
                   </p>
+                  <button
+                    v-if="item.description"
+                    type="button"
+                    class="mt-1 text-sm text-slate-500 underline underline-offset-2"
+                    @click="detalle = item"
+                  >
+                    Ver detalle
+                  </button>
                 </div>
                 <button
                   type="button"
@@ -345,6 +361,19 @@ const groupedHours = computed(() => {
               Ver los {{ catalogo.length }} servicios
             </button>
           </section>
+
+          <ServiceDetailModal
+            v-if="detalle"
+            :service="detalle"
+            :currency="page.business.currency"
+            @close="detalle = null"
+            @book="
+              (id) => {
+                detalle = null
+                bookService(id)
+              }
+            "
+          />
 
           <!-- Reservar -->
           <section ref="bookingRef" class="mb-10 scroll-mt-4">
