@@ -23,6 +23,28 @@ export interface AdminService {
   is_bookable_online: boolean
   is_active: boolean
   resource_ids?: number[]
+  /** La familia a la que pertenece. `null` = sin categoría. */
+  category?: { id: number; name: string } | null
+}
+
+/**
+ * Esconder o mostrar varios servicios en la página pública, de una.
+ *
+ * El caso que lo pidió: renunció la lashista. Servicio por servicio son nueve
+ * idas al formulario para apagar el mismo interruptor, y otras nueve para
+ * volver a ponerlas.
+ */
+export function useBulkServiceVisibility() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (payload: { service_ids: number[]; is_bookable_online: boolean }) =>
+      (await httpClient.put<{ updated: number; message: string }>('/services/bulk-visibility', payload))
+        .data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['services'] })
+    },
+  })
 }
 
 export interface TeamResource {
