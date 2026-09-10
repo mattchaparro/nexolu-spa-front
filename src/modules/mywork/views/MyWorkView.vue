@@ -10,6 +10,7 @@ import { useAppointments, type Appointment } from '@/modules/agenda/composables/
 import { useMoney } from '@/modules/cash/composables/useMoney'
 import { toLocalDateIso } from '@/utils/toLocalDateIso'
 
+import MyRatingsCard from '../components/MyRatingsCard.vue'
 import WalkInModal from '../components/WalkInModal.vue'
 import { useMyWork } from '../composables/useMyWork'
 
@@ -120,6 +121,12 @@ const STATUS_LABELS: Record<string, string> = {
             {{ period.data.services }} servicio(s) · {{ money(period.data.charged) }} cobrado
           </p>
         </article>
+      </div>
+
+      <!-- Debajo de lo que gana y encima de la agenda del día: se ve al
+           entrar, sin buscarla, pero no le tapa lo que vino a hacer. -->
+      <div v-if="data.ratings" class="mb-6">
+        <MyRatingsCard :ratings="data.ratings" />
       </div>
 
       <h2 class="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">

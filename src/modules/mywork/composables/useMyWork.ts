@@ -32,6 +32,29 @@ export interface MyWork {
     label: string
   }>
   agenda: AgendaRow[]
+  ratings: MyRatings
+}
+
+/**
+ * Las calificaciones de ELLA, en porcentaje sobre su propia escala.
+ *
+ * Porcentaje y no "4,9 de 5" porque las notas de Luxury no vienen todas sobre
+ * cinco: la encuesta vieja preguntaba atención con cinco botones, servicio con
+ * cuatro y puntualidad con tres. El servidor ya las normaliza; acá sólo se
+ * pintan. Ver `App\Support\Ratings\Nota` en el backend.
+ *
+ * Todo puede venir `null`: quien todavía no tiene ninguna opinión no tiene un
+ * cero, tiene nada. Son cosas distintas y se ven distinto.
+ */
+export interface MyRatings {
+  count: number
+  since: string
+  attention: number | null
+  service: number | null
+  punctuality: number | null
+  this_month: { count: number; attention: number | null }
+  previous_month: { count: number; attention: number | null }
+  comments: Array<{ comment: string; attention: number | null; date: string | null }>
 }
 
 export interface WalkInPayload {
