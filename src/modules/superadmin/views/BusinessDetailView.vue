@@ -66,6 +66,14 @@ const settings = ref<Record<string, number>>({})
  */
 const limits = ref<Record<string, number | null>>({})
 
+/**
+ * El flujo de etapas del negocio. `null` = los estados del núcleo.
+ *
+ * Sólo se asignaba al CREAR el negocio, así que uno ya existente no tenía cómo
+ * recibir uno: Luxury quedó sin flujo y no había dónde cambiarlo.
+ */
+const workflowId = ref<number | null>(null)
+
 watch(
   business,
   (b) => {
@@ -82,6 +90,7 @@ watch(
     flags.value = { ...b.resolved_features }
     settings.value = { ...b.scheduling_settings }
     limits.value = { ...(b.resolved_limits ?? {}) }
+    workflowId.value = b.appointment_workflow_id ?? null
   },
   { immediate: true },
 )
@@ -100,6 +109,7 @@ async function save(): Promise<void> {
     name: name.value.trim(),
     timezone: timezone.value.trim(),
     subscription_plan: plan.value ?? undefined,
+    appointment_workflow_id: workflowId.value,
     feature_flags: flags.value,
     // Un campo vacío es "sin tope", no cero: un tope de 0 dejaría al negocio
     // sin poder agregar a nadie.
@@ -168,6 +178,23 @@ async function save(): Promise<void> {
               label="Plan"
               :disabled="isPending"
             />
+
+            <!-- Qué etapas ve el negocio al mover una cita. Sin flujo se usan
+                 los estados internos, que sirven pero se llaman como los llama
+                 el sistema y no como los llama el mostrador. -->
+            <label class="text-sm text-slate-700">
+              Flujo de etapas
+              <select
+                v-model="workflowId"
+                class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900"
+                :disabled="isPending"
+              >
+                <option :value="null">Estados del sistema (sin flujo propio)</option>
+                <option v-for="w in business?.workflows ?? []" :key="w.id" :value="w.id">
+                  {{ w.name }}
+                </option>
+              </select>
+            </label>
           </div>
 
           <h3 class="mb-1 mt-5 text-sm font-medium text-slate-700">Equipo</h3>

@@ -37,6 +37,10 @@ export interface BusinessDetail extends PlatformBusiness {
   /** Cuánto lleva usado contra cada tope. */
   plan_usage: Record<string, { limit: number | null; used: number; remaining: number | null }>
   scheduling_settings: Record<string, number>
+  /** Qué flujo de etapas rige. `null` = los estados del núcleo. */
+  appointment_workflow_id: number | null
+  /** Los flujos disponibles para elegir, para no pedirlos aparte. */
+  workflows: Array<{ id: number; name: string }>
   users: Array<{
     id: number
     name: string
