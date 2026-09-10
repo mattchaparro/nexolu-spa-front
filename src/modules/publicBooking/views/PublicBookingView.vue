@@ -3,8 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import BookingFlow from '../components/BookingFlow.vue'
-import ServiceDetailModal from '../components/ServiceDetailModal.vue'
-import { usePublicPage, type PublicService } from '../composables/usePublicBooking'
+import { usePublicPage } from '../composables/usePublicBooking'
 
 const route = useRoute()
 const router = useRouter()
@@ -56,64 +55,13 @@ const preselected = ref<number | null>(null)
 /** Lo mismo para un combo. */
 const preselectedPackage = ref<number | null>(null)
 
-const bookingRef = ref<HTMLElement | null>(null)
 const verTodos = ref(0)
-
-/*
- * La vitrina de arriba muestra el catálogo COMPLETO sólo si es corto.
- *
- * Con nueve servicios en una pantalla de teléfono, quien llega tiene que rodar
- * por toda la lista para después encontrarse la misma lista otra vez dentro
- * del formulario. Se recorta a lo más pedido — que es lo que la vitrina hace
- * bien — y el catálogo entero vive en el paso de reservar, que ya sabe
- * filtrarlo por categoría.
- */
-const VITRINA_COMPLETA_HASTA = 6
-
-const catalogo = computed(() => page.value?.services ?? [])
-
-/** El servicio cuyo detalle se está mirando. */
-const detalle = ref<PublicService | null>(null)
-
-const vitrinaRecortada = computed(
-  () => catalogo.value.length > VITRINA_COMPLETA_HASTA && catalogo.value.some((s) => s.is_popular),
-)
-
-const vitrina = computed(() =>
-  vitrinaRecortada.value ? catalogo.value.filter((s) => s.is_popular) : catalogo.value,
-)
-
-function bookService(id: number | null): void {
-  preselectedPackage.value = null
-  preselected.value = id
-  bookingRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
-/** "Ver los N servicios": lleva al paso de reservar con el filtro quitado. */
-function verTodosLosServicios(): void {
-  verTodos.value++
-  bookService(null)
-}
-
-function bookPackage(id: number): void {
-  preselected.value = null
-  preselectedPackage.value = id
-  bookingRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
 
 watch(page, (value) => {
   if (value) {
     document.title = `${value.business.name} · Reservar`
   }
 })
-
-function money(value: number, currency: string): string {
-  return new Intl.NumberFormat('es-CO', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(value)
-}
 
 /** Días agrupados por franja: "Lun a Vie 9:00–18:00" se lee, siete líneas no. */
 const groupedHours = computed(() => {
@@ -263,120 +211,15 @@ const groupedHours = computed(() => {
             </button>
           </p>
 
-          <!-- Combos.
-             Van antes que los servicios sueltos: es lo que el negocio quiere
-             vender y lo que sale mejor de precio. -->
-          <section v-if="page.packages?.length" class="mb-10">
-            <h2 class="mb-3 text-lg font-semibold text-slate-900">Combos</h2>
-
-            <div
-              class="divide-y divide-emerald-100 rounded-xl border border-emerald-200 bg-emerald-50/40"
-            >
-              <div
-                v-for="combo in page.packages"
-                :key="combo.id"
-                class="flex items-center gap-4 p-4"
-              >
-                <img
-                  v-if="combo.image_url"
-                  :src="combo.image_url"
-                  :alt="combo.name"
-                  class="h-14 w-14 shrink-0 rounded-lg object-cover"
-                />
-                <div class="min-w-0 flex-1">
-                  <p class="font-medium text-slate-800">{{ combo.name }}</p>
-                  <p class="mt-0.5 text-sm text-slate-500">
-                    {{ combo.services.map((s) => s.name).join(' + ') }}
-                  </p>
-                  <p class="mt-1 text-sm text-slate-600">
-                    <b>{{ money(combo.total, page.business.currency) }}</b>
-                    <span v-if="combo.discount > 0" class="ml-1 text-slate-400 line-through">
-                      {{ money(combo.list_total, page.business.currency) }}
-                    </span>
-                    · {{ combo.total_minutes }} min
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  class="shrink-0 rounded-lg border border-emerald-400 bg-white px-3 py-1.5 text-sm text-emerald-800 transition hover:border-emerald-600"
-                  @click="bookPackage(combo.id)"
-                >
-                  Reservar
-                </button>
-              </div>
-            </div>
-          </section>
-
-          <!-- Servicios -->
-          <section v-if="page.services.length" class="mb-10">
-            <h2 class="mb-3 text-lg font-semibold text-slate-900">
-              {{ vitrinaRecortada ? 'Los más pedidos' : 'Servicios' }}
-            </h2>
-
-            <div class="divide-y divide-slate-100 rounded-xl border border-slate-200">
-              <div v-for="item in vitrina" :key="item.id" class="flex items-center gap-4 p-4">
-                <img
-                  v-if="item.image_url"
-                  :src="item.image_url"
-                  :alt="item.name"
-                  class="h-14 w-14 shrink-0 rounded-lg object-cover"
-                />
-                <div class="min-w-0 flex-1">
-                  <p class="font-medium text-slate-800">{{ item.name }}</p>
-                  <!-- Recortada. Las descripciones de Luxury promedian 169
-                       caracteres y llegan a 393: puestas enteras, la vitrina
-                       es una pared de texto que hay que rodar para llegar a
-                       lo que uno vino a hacer. Completa, en "Ver detalle". -->
-                  <p v-if="item.description" class="mt-0.5 line-clamp-2 text-sm text-slate-500">
-                    {{ item.description }}
-                  </p>
-                  <p class="mt-1 text-sm text-slate-600">
-                    {{ money(item.price, page.business.currency) }} · {{ item.duration_min }} min
-                  </p>
-                  <button
-                    v-if="item.description"
-                    type="button"
-                    class="mt-1 text-sm text-slate-500 underline underline-offset-2"
-                    @click="detalle = item"
-                  >
-                    Ver detalle
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  class="shrink-0 rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 transition hover:border-slate-500"
-                  @click="bookService(item.id)"
-                >
-                  Reservar
-                </button>
-              </div>
-            </div>
-
-            <button
-              v-if="vitrinaRecortada"
-              type="button"
-              class="mt-3 min-h-11 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-600 active:bg-slate-50"
-              @click="verTodosLosServicios"
-            >
-              Ver los {{ catalogo.length }} servicios
-            </button>
-          </section>
-
-          <ServiceDetailModal
-            v-if="detalle"
-            :service="detalle"
-            :currency="page.business.currency"
-            @close="detalle = null"
-            @book="
-              (id) => {
-                detalle = null
-                bookService(id)
-              }
-            "
-          />
+          <!-- La vitrina de combos y "los más pedidos" vivía acá arriba.
+               Se quitó: repetía el catálogo que el paso 1 ya muestra con
+               buscador, fichas y la lista agrupada -- y lo repetía ARRIBA,
+               así que quien llegaba rodaba dos veces la misma lista antes de
+               poder reservar. En una pantalla de teléfono dentro de WhatsApp
+               eso es la diferencia entre reservar y cerrar la página. -->
 
           <!-- Reservar -->
-          <section ref="bookingRef" class="mb-10 scroll-mt-4">
+          <section class="mb-10 scroll-mt-4">
             <h2 class="mb-3 text-lg font-semibold text-slate-900">Reservar tu cita</h2>
             <BookingFlow
               :slug="slug"

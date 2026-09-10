@@ -641,10 +641,51 @@ const emailValido = computed(
   () => email.value.trim() === '' || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.value.trim()),
 )
 const telefonoValido = computed(() => phone.value.replace(/\D/g, '').length >= 7)
+
+/*
+|------------------------------------------------------------------------------
+| El WhatsApp, confirmado a propósito
+|------------------------------------------------------------------------------
+| Bajo ese número se agenda la cita y se confirma. Un dígito cambiado no da
+| error en ningún lado: la cita queda hecha, la confirmación se va a un
+| desconocido, y quien reservó se entera el día de la cita -- o no llega.
+|
+| Escribiéndolo nadie se relee. Devuelto en grande y separado en grupos, sí:
+| "300 123 4567" se compara con la memoria de un vistazo, "3001234567" no.
+|
+| NO ES UNA VERIFICACIÓN DE VERDAD. Mandar un código y pedirlo de vuelta
+| necesita el canal de WhatsApp conectado, que todavía no lo está. Esto atrapa
+| el dedo torpe, que es la causa común; no atrapa a quien pone un número que no
+| es suyo.
+*/
+const telefonoConfirmado = ref(false)
+
+/** El número en grupos, para que se pueda leer y comparar. */
+const telefonoBonito = computed(() => {
+  const d = phone.value.replace(/\D/g, '')
+
+  if (d.length === 10) return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}`
+  if (d.length === 12 && d.startsWith('57')) {
+    return `+57 ${d.slice(2, 5)} ${d.slice(5, 8)} ${d.slice(8)}`
+  }
+
+  return phone.value.trim()
+})
+
+// Tocar el número lo vuelve a dejar sin confirmar: confirmar un número y luego
+// cambiarlo dejaría el visto bueno puesto sobre otro distinto.
+watch(phone, () => {
+  telefonoConfirmado.value = false
+})
 const nombreValido = computed(() => name.value.trim().length > 2)
 
 const canSubmit = computed(
-  () => nombreValido.value && telefonoValido.value && emailValido.value && !booking.value,
+  () =>
+    nombreValido.value &&
+    telefonoValido.value &&
+    telefonoConfirmado.value &&
+    emailValido.value &&
+    !booking.value,
 )
 
 async function submit(): Promise<void> {
@@ -703,7 +744,19 @@ function restart(): void {
   notes.value = ''
 }
 
-const TITULOS = ['¿Qué te vas a hacer?', '¿Con quién?', '¿Cuándo?', 'Tus datos']
+/*
+ * Cada paso dice QUÉ HACER, no una pregunta suelta.
+ *
+ * "¿Qué te vas a hacer?" es simpático y no instruye: junto a "Paso 1 de 4",
+ * lo que quien llega necesita leer es la tarea. Los otros tres van en el mismo
+ * tono para que la tira se lea como una sola cosa.
+ */
+const TITULOS = [
+  'Selecciona tus servicios',
+  'Elige con quién',
+  'Elige día y hora',
+  'Confirma tus datos',
+]
 
 /*
 |------------------------------------------------------------------------------
@@ -1179,9 +1232,15 @@ const depositAmount = computed(() => {
               · {{ combo.total_minutes }} min
             </span>
           </span>
-          <span class="shrink-0 text-slate-300">›</span>
-        </button>
 
+          <!-- La misma acción visible que en un servicio: dos filas que hacen
+               lo mismo no pueden verse distinto. -->
+          <span
+            class="shrink-0 self-center rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white"
+          >
+            Elegir
+          </span>
+        </button>
       </template>
 
       <!-- Encabezados y servicios en una sola tira. En "Todos" la lista va
@@ -1239,24 +1298,48 @@ const depositAmount = computed(() => {
             <span class="mt-1 block text-sm text-slate-700">
               {{ money(fila.item.price) }} · {{ fila.item.duration_min }} min
             </span>
+
+            <!-- Enlace y no caja: la caja competía con el botón de elegir y
+                 partía "Ver / detalle" en dos renglones. Acá abajo se lee como
+                 lo que es -- algo secundario -- y deja el peso visual al
+                 botón.
+
+                 `span role=button` y no `<button>`: esta fila YA es un botón,
+                 y un botón dentro de otro no es HTML válido -- el navegador lo
+                 saca del padre y la fila deja de funcionar. Con `@click.stop`,
+                 para que ver el detalle no elija el servicio.
+
+                 `py-1.5 -my-1.5` le da altura de dedo sin separar el texto del
+                 precio: el área tocable crece, la línea no se mueve. -->
+            <span
+              v-if="fila.item.description && !armando"
+              role="button"
+              tabindex="0"
+              class="-my-1.5 mt-0.5 inline-block py-1.5 text-xs text-slate-500 underline underline-offset-2"
+              @click.stop="detalle = fila.item"
+              @keydown.enter.stop="detalle = fila.item"
+            >
+              Ver detalle
+            </span>
           </span>
 
-          <!-- Un `span` y no un `button`: esta fila YA es un botón, y un botón
-               dentro de otro no es HTML válido -- el navegador lo saca del
-               padre y la fila deja de funcionar. `@click.stop` para que ver el
-               detalle no reserve el servicio. -->
+          <!-- La acción de la fila, VISIBLE. Antes era una flecha gris de
+               diez píxeles: en un teléfono no se lee como "esto se toca", y
+               la fila parecía un renglón de catálogo. Ahora dice qué hace. -->
           <span
-            v-if="fila.item.description && !armando"
-            role="button"
-            tabindex="0"
-            class="shrink-0 self-center rounded-lg border border-slate-200 px-2 py-1.5 text-[11px] text-slate-600 active:bg-slate-100"
-            @click.stop="detalle = fila.item"
-            @keydown.enter.stop="detalle = fila.item"
+            v-if="!armando"
+            class="shrink-0 self-center rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white"
           >
-            Ver<br />detalle
+            Elegir
           </span>
 
-          <span v-if="!armando" class="shrink-0 text-slate-300">›</span>
+          <span
+            v-else
+            class="shrink-0 self-center text-xs font-medium"
+            :class="chainIds.includes(fila.item.id) ? 'text-slate-900' : 'text-slate-400'"
+          >
+            {{ chainIds.includes(fila.item.id) ? 'Quitar' : 'Agregar' }}
+          </span>
         </button>
       </template>
 
@@ -1667,9 +1750,55 @@ const depositAmount = computed(() => {
           required
         />
         <span class="mt-1 block text-xs font-normal text-slate-500">
-          Para confirmarte la cita. No lo usamos para nada más.
+          Acá te confirmamos la cita. No lo usamos para nada más.
         </span>
       </label>
+
+      <!-- Confirmar el número, en grande y separado.
+           Bajo ese número se agenda y se confirma: un dígito cambiado no da
+           error en ningún lado -- la cita queda hecha y el mensaje se va a un
+           desconocido. Escribiéndolo nadie se relee; devuelto así, sí. -->
+      <div
+        v-if="telefonoValido"
+        class="rounded-xl border p-3"
+        :class="
+          telefonoConfirmado ? 'border-emerald-300 bg-emerald-50' : 'border-amber-300 bg-amber-50'
+        "
+      >
+        <template v-if="!telefonoConfirmado">
+          <p class="text-xs text-amber-900">Te escribiremos por WhatsApp a este número:</p>
+          <p class="mt-1 text-xl font-semibold tabular-nums tracking-wide text-amber-950">
+            {{ telefonoBonito }}
+          </p>
+          <button
+            type="button"
+            class="mt-2 min-h-12 w-full rounded-xl bg-amber-600 px-4 font-medium text-white active:bg-amber-700"
+            @click="telefonoConfirmado = true"
+          >
+            Sí, es mi WhatsApp
+          </button>
+        </template>
+
+        <p v-else class="flex items-center gap-2 text-sm text-emerald-900">
+          <span aria-hidden="true">✓</span>
+          <span class="flex-1">
+            Te confirmamos al
+            <b class="tabular-nums">{{ telefonoBonito }}</b>
+          </span>
+          <!-- No se toca `phone`: se quita el visto bueno y el campo de arriba
+               queda listo para corregir. Borrarlo obligaría a reescribirlo
+               entero por cambiar un dígito. -->
+          <span
+            role="button"
+            tabindex="0"
+            class="shrink-0 text-xs underline underline-offset-2"
+            @click="telefonoConfirmado = false"
+            @keydown.enter="telefonoConfirmado = false"
+          >
+            Cambiar
+          </span>
+        </p>
+      </div>
 
       <label class="text-sm font-medium text-slate-700">
         Tu correo (opcional)
