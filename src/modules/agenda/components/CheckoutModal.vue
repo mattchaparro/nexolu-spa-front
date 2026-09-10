@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth.store'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 
+import LoyaltyCardPanel from './LoyaltyCardPanel.vue'
 import StagePicker from './StagePicker.vue'
 
 import { useClientLoyalty } from '@/modules/settings/composables/useLoyalty'
@@ -289,20 +290,19 @@ async function submit(): Promise<void> {
 
       <!-- La tarjeta de sellos. Se muestra siempre que haya programa: ver que
            le faltan 2 sellos es lo que hace que quien cobra se lo diga, y eso
-           es la mitad del valor del programa. -->
-      <div
-        v-if="card?.program"
-        class="rounded-md border px-4 py-3 text-sm"
-        :class="premiosDisponibles.length ? 'border-amber-300 bg-amber-50' : 'border-slate-200'"
-      >
-        <p v-if="!premiosDisponibles.length" class="text-slate-600">
-          {{ card.program.name }}: {{ card.stamps }} de {{ card.required }} sellos ·
-          <span class="text-slate-500">
-            le faltan {{ card.remaining }} para {{ card.program.reward_label }}
-          </span>
-        </p>
+           es la mitad del valor del programa.
 
-        <template v-else>
+           El estado de la tarjeta y el premio a canjear son DOS cosas y ahora
+           se ven las dos. Antes el premio tapaba a la tarjeta: en cuanto había
+           uno disponible, el renglón de los sellos desaparecía y quien cobraba
+           dejaba de saber cuántos llevaba ni qué venía después. -->
+      <div v-if="card?.program" class="flex flex-col gap-2">
+        <LoyaltyCardPanel :card="card" />
+
+        <div
+          v-if="premiosDisponibles.length"
+          class="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm"
+        >
           <p class="font-medium text-amber-900">
             Tiene
             {{
@@ -330,7 +330,7 @@ async function submit(): Promise<void> {
           <p class="mt-1 text-xs text-amber-800">
             Tócalo para aplicarlo a este cobro. Si no, queda guardado para la próxima.
           </p>
-        </template>
+        </div>
       </div>
 
       <!--
