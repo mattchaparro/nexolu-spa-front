@@ -774,17 +774,14 @@ function normalizar(texto: string): string {
 }
 
 /*
- * Se entra por "los más pedidos" cuando los hay: en un catálogo largo, lo que
- * la mayoría reserva es la mejor primera pantalla. Sin ese dato se entra por
- * la lista completa, que al menos no esconde nada.
+ * Se entra por "Todos", que en esta pantalla NO es un muro: es la lista
+ * agrupada -- primero los combos, luego los más pedidos, luego cada categoría
+ * con su encabezado -- que es como la dueña la lee en su página de siempre.
+ *
+ * Antes se entraba con el filtro "los más pedidos" ya puesto. Escondía los
+ * otros treinta y seis servicios detrás de una ficha que parecía apagada, y
+ * dejaba la pantalla arrancando en un estado que nadie eligió.
  */
-watch(
-  hayPopulares,
-  (hay) => {
-    if (hay && puedeFiltrar.value && filtro.value === null) filtro.value = 'populares'
-  },
-  { immediate: true },
-)
 
 const serviciosVisibles = computed(() => {
   const texto = normalizar(busqueda.value.trim())
@@ -806,6 +803,76 @@ const serviciosVisibles = computed(() => {
   if (filtro.value === 'populares') return props.page.services.filter((s) => s.is_popular)
 
   return props.page.services.filter((s) => s.category_id === filtro.value)
+})
+
+/*
+ * En "Todos" la lista va AGRUPADA por categoría, con su encabezado.
+ *
+ * Es como la lee la dueña en su página de siempre: "MÁS SOLICITADOS", luego
+ * "COMBOS", luego "MANICURE", "PEDICURE"… Cuarenta servicios en una tira sin
+ * cortes son cuarenta filas iguales; con los encabezados, quien rueda sabe
+ * dónde está y dónde dejar de rodar.
+ *
+ * Sólo en "Todos": eligiendo una categoría el encabezado repetiría lo que ya
+ * dice la ficha marcada, y buscando estorbaría -- los resultados de "rubber"
+ * no son una categoría.
+ */
+const gruposVisibles = computed(() => {
+  if (busqueda.value.trim() !== '' || armando.value || filtro.value !== null) {
+    return []
+  }
+
+  const grupos: Array<{ key: string; label: string; items: PublicService[] }> = []
+
+  const populares = props.page.services.filter((s) => s.is_popular)
+
+  if (populares.length) {
+    grupos.push({ key: 'pop', label: 'Los más pedidos', items: populares })
+  }
+
+  for (const cat of categorias.value) {
+    const items = props.page.services.filter((s) => s.category_id === cat.id)
+
+    if (items.length) grupos.push({ key: `c${cat.id}`, label: cat.name, items })
+  }
+
+  /*
+   * Los que no tienen categoría, al final y sin inventarles una. Hoy Luxury no
+   * tiene ninguno, pero un servicio nuevo nace sin categoría y desaparecer de
+   * la lista por eso sería peor que mostrarlo suelto.
+   */
+  const sueltos = props.page.services.filter((s) => s.category_id === null)
+
+  if (sueltos.length) grupos.push({ key: 'otros', label: 'Otros', items: sueltos })
+
+  return grupos
+})
+
+/**
+ * La lista tal como se pinta: encabezados y servicios en una sola tira.
+ *
+ * Aplanada a propósito, en vez de un `v-for` de grupos con otro `v-for`
+ * adentro: la fila de un servicio tiene imagen, casilla de orden, precio y el
+ * botón de detalle, y tenerla escrita dos veces es la forma segura de que un
+ * arreglo se aplique a una sola.
+ */
+type Fila =
+  | { tipo: 'titulo'; key: string; label: string }
+  | { tipo: 'servicio'; key: string; item: PublicService }
+
+const filasVisibles = computed<Fila[]>(() => {
+  if (gruposVisibles.value.length) {
+    return gruposVisibles.value.flatMap((g): Fila[] => [
+      { tipo: 'titulo', key: g.key, label: g.label },
+      ...g.items.map((item): Fila => ({ tipo: 'servicio', key: `s${item.id}`, item })),
+    ])
+  }
+
+  return serviciosVisibles.value.map((item): Fila => ({
+    tipo: 'servicio',
+    key: `s${item.id}`,
+    item,
+  }))
 })
 
 /** Los combos se ven en "todos" y en su propia ficha, no mientras se busca. */
@@ -997,53 +1064,6 @@ const depositAmount = computed(() => {
         </button>
       </div>
 
-      <!-- Los combos van primero y marcados: es lo que el negocio quiere
-           vender, y lo que le sale más barato a quien reserva. Pero como
-           LISTA, no como muro: con "Combos" de ficha, quien viene por un
-           retoque de cejas ya no los pasa de largo cada vez. -->
-      <template v-if="combosVisibles.length">
-        <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Combos</p>
-
-        <button
-          v-for="combo in combosVisibles"
-          :key="`p${combo.id}`"
-          type="button"
-          class="flex min-h-11 items-center gap-3 rounded-xl border border-emerald-300 bg-emerald-50/60 p-3 text-left active:bg-emerald-100"
-          @click="pickPackage(combo.id)"
-        >
-          <img
-            v-if="combo.image_url"
-            :src="combo.image_url"
-            :alt="combo.name"
-            class="h-16 w-16 shrink-0 rounded-lg object-cover"
-          />
-          <span class="min-w-0 flex-1">
-            <span class="flex items-center gap-2">
-              <span class="font-medium text-slate-900">{{ combo.name }}</span>
-              <span
-                v-if="combo.discount > 0"
-                class="rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white"
-              >
-                -{{ Math.round(combo.savings_percent) }}%
-              </span>
-            </span>
-            <span class="mt-0.5 block truncate text-xs text-slate-500">
-              {{ combo.services.map((s) => s.name).join(' + ') }}
-            </span>
-            <span class="mt-1 block text-sm text-slate-700">
-              <b>{{ money(combo.total) }}</b>
-              <span v-if="combo.discount > 0" class="ml-1 text-slate-400 line-through">
-                {{ money(combo.list_total) }}
-              </span>
-              · {{ combo.total_minutes }} min
-            </span>
-          </span>
-          <span class="shrink-0 text-slate-300">›</span>
-        </button>
-
-        <p class="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Servicios</p>
-      </template>
-
       <!-- Los filtros: sólo con catálogo largo, y nunca mientras se arma una
            visita de varias partes. -->
       <div v-if="puedeFiltrar && !armando && !busqueda" class="flex flex-wrap gap-2">
@@ -1118,69 +1138,127 @@ const depositAmount = computed(() => {
         }}
       </button>
 
-      <button
-        v-for="item in serviciosVisibles"
-        :key="item.id"
-        type="button"
-        class="flex min-h-11 items-center gap-3 rounded-xl border bg-white p-3 text-left transition active:bg-slate-50"
-        :class="
-          armando && chainIds.includes(item.id)
-            ? 'border-slate-900 ring-1 ring-slate-900'
-            : 'border-slate-200'
-        "
-        @click="armando ? toggleChainService(item.id) : pickService(item.id)"
-      >
-        <img
-          v-if="item.image_url"
-          :src="item.image_url"
-          :alt="item.name"
-          class="h-16 w-16 shrink-0 rounded-lg object-cover"
-        />
+      <!-- Los combos van primero y marcados: es lo que el negocio quiere
+           vender, y lo que le sale más barato a quien reserva. Pero como
+           LISTA, no como muro: con "Combos" de ficha, quien viene por un
+           retoque de cejas ya no los pasa de largo cada vez. -->
+      <template v-if="combosVisibles.length">
+        <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Combos</p>
 
-        <!-- Marcando: la casilla lleva el número de orden de la visita. Sin
-             él, "manos y pies" y "pies y manos" se verían igual. -->
-        <span
-          v-if="armando"
-          class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold"
+        <button
+          v-for="combo in combosVisibles"
+          :key="`p${combo.id}`"
+          type="button"
+          class="flex min-h-11 items-center gap-3 rounded-xl border border-emerald-300 bg-emerald-50/60 p-3 text-left active:bg-emerald-100"
+          @click="pickPackage(combo.id)"
+        >
+          <img
+            v-if="combo.image_url"
+            :src="combo.image_url"
+            :alt="combo.name"
+            class="h-16 w-16 shrink-0 rounded-lg object-cover"
+          />
+          <span class="min-w-0 flex-1">
+            <span class="flex items-center gap-2">
+              <span class="font-medium text-slate-900">{{ combo.name }}</span>
+              <span
+                v-if="combo.discount > 0"
+                class="rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white"
+              >
+                -{{ Math.round(combo.savings_percent) }}%
+              </span>
+            </span>
+            <span class="mt-0.5 block truncate text-xs text-slate-500">
+              {{ combo.services.map((s) => s.name).join(' + ') }}
+            </span>
+            <span class="mt-1 block text-sm text-slate-700">
+              <b>{{ money(combo.total) }}</b>
+              <span v-if="combo.discount > 0" class="ml-1 text-slate-400 line-through">
+                {{ money(combo.list_total) }}
+              </span>
+              · {{ combo.total_minutes }} min
+            </span>
+          </span>
+          <span class="shrink-0 text-slate-300">›</span>
+        </button>
+
+      </template>
+
+      <!-- Encabezados y servicios en una sola tira. En "Todos" la lista va
+           agrupada por categoría, como la lee la dueña en su página de
+           siempre: cuarenta filas iguales sin cortes no dicen dónde está uno
+           ni dónde dejar de rodar. -->
+      <template v-for="fila in filasVisibles" :key="fila.key">
+        <p
+          v-if="fila.tipo === 'titulo'"
+          class="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400"
+        >
+          {{ fila.label }}
+        </p>
+
+        <button
+          v-else
+          type="button"
+          class="flex min-h-11 items-center gap-3 rounded-xl border bg-white p-3 text-left transition active:bg-slate-50"
           :class="
-            chainIds.includes(item.id)
-              ? 'border-slate-900 bg-slate-900 text-white'
-              : 'border-slate-300 text-transparent'
+            armando && chainIds.includes(fila.item.id)
+              ? 'border-slate-900 ring-1 ring-slate-900'
+              : 'border-slate-200'
           "
+          @click="armando ? toggleChainService(fila.item.id) : pickService(fila.item.id)"
         >
-          {{ chainIds.indexOf(item.id) + 1 }}
-        </span>
+          <img
+            v-if="fila.item.image_url"
+            :src="fila.item.image_url"
+            :alt="fila.item.name"
+            class="h-16 w-16 shrink-0 rounded-lg object-cover"
+          />
 
-        <span class="min-w-0 flex-1">
-          <span class="block font-medium text-slate-900">{{ item.name }}</span>
-          <!-- Una línea, no dos: con descripciones de hasta 393 caracteres,
-               dos líneas por servicio son cuarenta párrafos que nadie lee
-               mientras busca el suyo. Lo completo está en "Ver detalle". -->
-          <span v-if="item.description" class="mt-0.5 block truncate text-xs text-slate-500">
-            {{ item.description }}
+          <!-- Marcando: la casilla lleva el número de orden de la visita. Sin
+               él, "manos y pies" y "pies y manos" se verían igual. -->
+          <span
+            v-if="armando"
+            class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold"
+            :class="
+              chainIds.includes(fila.item.id)
+                ? 'border-slate-900 bg-slate-900 text-white'
+                : 'border-slate-300 text-transparent'
+            "
+          >
+            {{ chainIds.indexOf(fila.item.id) + 1 }}
           </span>
-          <span class="mt-1 block text-sm text-slate-700">
-            {{ money(item.price) }} · {{ item.duration_min }} min
+
+          <span class="min-w-0 flex-1">
+            <span class="block font-medium text-slate-900">{{ fila.item.name }}</span>
+            <!-- Una línea, no dos: con descripciones de hasta 393 caracteres,
+                 dos líneas por servicio son cuarenta párrafos que nadie lee
+                 mientras busca el suyo. Lo completo está en "Ver detalle". -->
+            <span v-if="fila.item.description" class="mt-0.5 block truncate text-xs text-slate-500">
+              {{ fila.item.description }}
+            </span>
+            <span class="mt-1 block text-sm text-slate-700">
+              {{ money(fila.item.price) }} · {{ fila.item.duration_min }} min
+            </span>
           </span>
-        </span>
 
-        <!-- Un `span` y no un `button`: esta fila YA es un botón, y un botón
-             dentro de otro no es HTML válido -- el navegador lo saca del
-             padre y la fila deja de funcionar. `@click.stop` para que ver el
-             detalle no reserve el servicio. -->
-        <span
-          v-if="item.description && !armando"
-          role="button"
-          tabindex="0"
-          class="shrink-0 self-center rounded-lg border border-slate-200 px-2 py-1.5 text-[11px] text-slate-600 active:bg-slate-100"
-          @click.stop="detalle = item"
-          @keydown.enter.stop="detalle = item"
-        >
-          Ver<br />detalle
-        </span>
+          <!-- Un `span` y no un `button`: esta fila YA es un botón, y un botón
+               dentro de otro no es HTML válido -- el navegador lo saca del
+               padre y la fila deja de funcionar. `@click.stop` para que ver el
+               detalle no reserve el servicio. -->
+          <span
+            v-if="fila.item.description && !armando"
+            role="button"
+            tabindex="0"
+            class="shrink-0 self-center rounded-lg border border-slate-200 px-2 py-1.5 text-[11px] text-slate-600 active:bg-slate-100"
+            @click.stop="detalle = fila.item"
+            @keydown.enter.stop="detalle = fila.item"
+          >
+            Ver<br />detalle
+          </span>
 
-        <span v-if="!armando" class="shrink-0 text-slate-300">›</span>
-      </button>
+          <span v-if="!armando" class="shrink-0 text-slate-300">›</span>
+        </button>
+      </template>
 
       <!-- Buscó y no hay nada. Se dice, con el texto que escribió, y se le
            ofrece salir del callejón sin tener que borrar letra por letra. -->
