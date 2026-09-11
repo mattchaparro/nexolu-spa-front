@@ -10,6 +10,22 @@ const auth = useAuthStore()
 const term = ref('')
 
 const { data, isLoading } = useClientList(term)
+
+/*
+ * "Hace 3 días", no una fecha.
+ *
+ * Quien mira esta lista está decidiendo a quién llamar: "hace 3 días" se
+ * responde solo, y "2026-09-08" hay que restarlo mentalmente.
+ */
+function hace(dias: number | null): string {
+  if (dias === null) return '—'
+  if (dias === 0) return 'hoy'
+  if (dias === 1) return 'ayer'
+  if (dias < 30) return `hace ${dias} días`
+  if (dias < 365) return `hace ${Math.round(dias / 30)} meses`
+
+  return 'hace más de un año'
+}
 </script>
 
 <template>
@@ -47,7 +63,9 @@ const { data, isLoading } = useClientList(term)
           <tr>
             <th class="px-4 py-3 font-medium">Cliente</th>
             <th class="px-4 py-3 font-medium">Teléfono</th>
+            <th class="px-4 py-3 font-medium">Cómo va</th>
             <th class="px-4 py-3 text-right font-medium">Visitas</th>
+            <th class="px-4 py-3 text-right font-medium">Última</th>
           </tr>
         </thead>
 
@@ -63,7 +81,30 @@ const { data, isLoading } = useClientList(term)
               <span v-if="!client.is_active" class="ml-2 text-xs text-slate-400">inactivo</span>
             </td>
             <td class="px-4 py-3 tabular-nums text-slate-600">{{ client.phone ?? '—' }}</td>
+
+            <!-- La etiqueta, calculada de sus visitas. Frecuente en verde
+                 porque es la que hay que cuidar; "sin visitas" en gris para
+                 que no compita: hoy son 357 de 759 y teñirlas de rojo pintaría
+                 media pantalla de alarma por algo que no es culpa de nadie. -->
+            <td class="px-4 py-3">
+              <span
+                class="rounded-full px-2 py-0.5 text-xs font-medium"
+                :class="{
+                  'bg-emerald-100 text-emerald-800': client.segment === 'frecuente',
+                  'bg-indigo-100 text-indigo-800': client.segment === 'ocasional',
+                  'bg-amber-100 text-amber-800': client.segment === 'nueva',
+                  'bg-slate-100 text-slate-500': client.segment === 'sin_visitas',
+                }"
+              >
+                {{ client.segment_label }}
+              </span>
+            </td>
+
             <td class="px-4 py-3 text-right tabular-nums text-slate-600">{{ client.visits }}</td>
+
+            <td class="px-4 py-3 text-right text-sm text-slate-500">
+              {{ hace(client.days_since_visit) }}
+            </td>
           </tr>
         </tbody>
       </table>

@@ -9,6 +9,19 @@ export interface ClientRow {
   phone: string | null
   email: string | null
   visits: number
+
+  /*
+   * En qué punto de su relación con el local está. CALCULADO, no escrito a
+   * mano: una etiqueta manual sobre 759 fichas queda vieja al mes siguiente.
+   * Los umbrales salen de los datos reales — ver `Segmento` en el backend.
+   */
+  segment: 'frecuente' | 'ocasional' | 'nueva' | 'sin_visitas'
+  segment_label: string
+
+  last_visit_at: string | null
+  /** Cuántos días hace que no viene. `null` = nunca vino. */
+  days_since_visit: number | null
+
   is_active: boolean
 }
 

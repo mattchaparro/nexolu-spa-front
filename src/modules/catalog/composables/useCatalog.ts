@@ -39,8 +39,12 @@ export function useBulkServiceVisibility() {
 
   return useMutation({
     mutationFn: async (payload: { service_ids: number[]; is_bookable_online: boolean }) =>
-      (await httpClient.put<{ updated: number; message: string }>('/services/bulk-visibility', payload))
-        .data,
+      (
+        await httpClient.put<{ updated: number; message: string }>(
+          '/services/bulk-visibility',
+          payload,
+        )
+      ).data,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['services'] })
     },

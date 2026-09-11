@@ -116,6 +116,18 @@ const ITEMS: Array<NavItem & { permission?: string; onlyStaff?: boolean }> = [
     routeName: 'services',
     permission: 'servicios.gestionar',
   },
+  /*
+   * Con `citas.ver` y no con `servicios.gestionar`: quien atiende tiene que
+   * poder mirar si queda crema y venderla. Las acciones de dentro sí piden el
+   * permiso que corresponde.
+   */
+  {
+    label: 'Productos',
+    icon: 'pi pi-shopping-bag',
+    routeName: 'products',
+    permission: 'citas.ver',
+    featureKey: 'product_sales',
+  },
   {
     label: 'Equipo',
     icon: 'pi pi-id-card',
