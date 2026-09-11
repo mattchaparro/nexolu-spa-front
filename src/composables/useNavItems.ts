@@ -156,6 +156,19 @@ const ITEMS: Array<NavItem & { permission?: string; onlyStaff?: boolean }> = [
     permission: 'servicios.gestionar',
     featureKey: 'promotions',
   },
+  /*
+   * Aparte de "Campañas", que son descuentos. Una difusión es un mensaje que
+   * SALE hacia las clientas y se paga por cada uno; un descuento es una regla
+   * de precio. Meterlas en la misma pantalla haría que mandar mensajes
+   * pareciera tan inocuo como cambiar un precio.
+   */
+  {
+    label: 'Difusiones',
+    icon: 'pi pi-send',
+    routeName: 'broadcasts',
+    permission: 'servicios.gestionar',
+    featureKey: 'promotions',
+  },
   {
     label: 'Fidelización',
     icon: 'pi pi-star',

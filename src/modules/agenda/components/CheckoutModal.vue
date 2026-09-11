@@ -10,6 +10,7 @@ import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 import IdentificarCliente from './IdentificarCliente.vue'
 import LoyaltyCardPanel from './LoyaltyCardPanel.vue'
 import StagePicker from './StagePicker.vue'
+import VenderEnElCobro from './VenderEnElCobro.vue'
 
 import { useClientLoyalty } from '@/modules/settings/composables/useLoyalty'
 
@@ -161,6 +162,9 @@ async function marcarAbono(): Promise<void> {
  */
 const asociadaAhora = ref<number | null>(null)
 
+/** Lo que lleva en producto, para poder decir cuánto cobrar en total. */
+const productosVendidos = ref(0)
+
 const clienteId = computed(() => props.appointment?.client_id ?? asociadaAhora.value)
 
 const { notify } = useSystemAlert()
@@ -209,6 +213,7 @@ watch(open, (isOpen) => {
     // nadie lo haya elegido es peor que olvidar ofrecerlo.
     premioElegido.value = null
     asociadaAhora.value = null
+    productosVendidos.value = 0
     // Los precios vuelven a los de la carta: lo que se escribió para otra
     // cita no puede quedar colgado en ésta.
     preciosEscritos.value = {}
@@ -408,6 +413,16 @@ async function submit(): Promise<void> {
         </p>
       </div>
 
+      <!-- Llevar un producto mientras se cobra: es donde más se vende una
+           crema, con la clienta pagando y el producto a la vista. -->
+      <VenderEnElCobro
+        v-if="appointment && auth.hasFeature('product_sales')"
+        :appointment-id="appointment.id"
+        :client-id="clienteId"
+        :payment-method-id="paymentMethodId"
+        @vendido="(t) => (productosVendidos = t)"
+      />
+
       <div class="rounded-md border border-slate-200 px-4 py-3 text-sm">
         <p class="flex justify-between text-slate-600">
           <span>Subtotal</span><span class="tabular-nums">{{ money(subtotal) }}</span>
@@ -428,6 +443,24 @@ async function submit(): Promise<void> {
         >
           <span>Total</span><span class="tabular-nums">{{ money(total) }}</span>
         </p>
+        <!-- El producto va DEBAJO del total del servicio y no sumado dentro.
+             Son dos ventas: el servicio genera comisión y el producto no, y
+             meterlos en un solo número haría que la manicurista cobrara
+             porcentaje sobre una crema que no aplicó. Lo que el mostrador
+             necesita saber -- cuánto cobrar en total -- se dice aparte. -->
+        <template v-if="productosVendidos > 0">
+          <p class="flex justify-between text-slate-600">
+            <span>Productos</span>
+            <span class="tabular-nums">{{ money(productosVendidos) }}</span>
+          </p>
+          <p
+            class="mt-1 flex justify-between border-t border-slate-100 pt-1 font-semibold text-slate-900"
+          >
+            <span>A cobrar en total</span>
+            <span class="tabular-nums">{{ money(total + productosVendidos) }}</span>
+          </p>
+        </template>
+
         <!-- El abono se resta de lo que pone hoy, no del total: la venta y la
              comisión siguen siendo sobre el precio completo. -->
         <template v-if="abonoRecibido > 0">

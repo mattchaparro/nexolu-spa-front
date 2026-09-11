@@ -178,6 +178,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { permission: 'servicios.gestionar', feature: 'promotions' },
   },
   {
+    path: '/difusiones',
+    name: 'broadcasts',
+    component: () => import('@/modules/messages/views/BroadcastsView.vue'),
+    meta: { permission: 'servicios.gestionar', feature: 'promotions' },
+  },
+  {
     path: '/productos',
     name: 'products',
     component: () => import('@/modules/catalog/views/ProductListView.vue'),
