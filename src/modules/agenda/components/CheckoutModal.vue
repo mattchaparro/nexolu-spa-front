@@ -2,10 +2,12 @@
 import { computed, ref, watch } from 'vue'
 
 import { usePaymentMethods } from '@/composables/usePaymentMethods'
+import { useSystemAlert } from '@/composables/useSystemAlert'
 import { useAuthStore } from '@/stores/auth.store'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 
+import IdentificarCliente from './IdentificarCliente.vue'
 import LoyaltyCardPanel from './LoyaltyCardPanel.vue'
 import StagePicker from './StagePicker.vue'
 
@@ -74,8 +76,8 @@ function precioDe(item: { id: number; price: number }): number {
 }
 
 /** Las líneas cuyo precio se apartó de la carta. */
-const cambiados = computed(
-  () => (props.appointment?.items ?? []).filter((i) => precioDe(i) !== i.price),
+const cambiados = computed(() =>
+  (props.appointment?.items ?? []).filter((i) => precioDe(i) !== i.price),
 )
 
 const subtotal = computed(
@@ -149,7 +151,24 @@ async function marcarAbono(): Promise<void> {
 | obligaría a acordarse de ir a mirarla antes de cobrar, y no se acuerda nadie.
 */
 
-const clienteId = computed(() => props.appointment?.client_id ?? null)
+/*
+ * La ficha que se acaba de asociar, sin esperar a que la agenda se recargue.
+ *
+ * `props.appointment` viene de la lista del padre: hasta que esa consulta no
+ * vuelva, seguiría diciendo que la cita no tiene clienta -- y la tarjeta de
+ * sellos no aparecería justo después de haberla identificado, que es cuando
+ * quien cobra quiere verla.
+ */
+const asociadaAhora = ref<number | null>(null)
+
+const clienteId = computed(() => props.appointment?.client_id ?? asociadaAhora.value)
+
+const { notify } = useSystemAlert()
+
+function onClienteAsociada(cliente: { id: number; display_name: string }): void {
+  asociadaAhora.value = cliente.id
+  notify(`Visita asociada a ${cliente.display_name}.`, 'success')
+}
 const { data: card } = useClientLoyalty(
   clienteId,
   computed(() => open.value && auth.hasFeature('loyalty')),
@@ -189,6 +208,7 @@ watch(open, (isOpen) => {
     // El premio NO se preselecciona: gastar la tarjeta de alguien sin que
     // nadie lo haya elegido es peor que olvidar ofrecerlo.
     premioElegido.value = null
+    asociadaAhora.value = null
     // Los precios vuelven a los de la carta: lo que se escribió para otra
     // cita no puede quedar colgado en ésta.
     preciosEscritos.value = {}
@@ -288,6 +308,14 @@ async function submit(): Promise<void> {
         </div>
       </div>
 
+      <!-- Sin ficha no hay a quien sumarle el sello ni a quien encuestar.
+           Va ANTES de la tarjeta de sellos porque es lo que la hace existir. -->
+      <IdentificarCliente
+        v-if="appointment && !clienteId"
+        :appointment-id="appointment.id"
+        @asociada="onClienteAsociada"
+      />
+
       <!-- La tarjeta de sellos. Se muestra siempre que haya programa: ver que
            le faltan 2 sellos es lo que hace que quien cobra se lo diga, y eso
            es la mitad del valor del programa.
@@ -350,9 +378,7 @@ async function submit(): Promise<void> {
             <span class="block truncate text-sm text-slate-800">{{ item.service_name }}</span>
             <span class="block text-xs text-slate-500">
               {{ item.resource_name }}
-              <span v-if="precioDe(item) !== item.price">
-                · carta {{ money(item.price) }}
-              </span>
+              <span v-if="precioDe(item) !== item.price"> · carta {{ money(item.price) }} </span>
             </span>
           </span>
 
@@ -373,7 +399,11 @@ async function submit(): Promise<void> {
         </div>
 
         <p v-if="cambiados.length" class="mt-2 text-xs text-amber-800">
-          {{ cambiados.length === 1 ? 'Un servicio se cobra' : `${cambiados.length} servicios se cobran` }}
+          {{
+            cambiados.length === 1
+              ? 'Un servicio se cobra'
+              : `${cambiados.length} servicios se cobran`
+          }}
           distinto a la carta. Queda anotado.
         </p>
       </div>

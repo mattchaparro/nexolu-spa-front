@@ -199,6 +199,60 @@ export function useRegisterDeposit() {
 
 /*
 |------------------------------------------------------------------------------
+| Identificar a quien se tiene delante
+|------------------------------------------------------------------------------
+| De 3.331 visitas cobradas, 2.112 no tenían ficha. Sin ficha no hay sello, ni
+| encuesta, ni historial: por eso hay exactamente 1.219 sellos, que son las
+| 1.219 visitas que sí la tienen.
+|
+| Se busca por teléfono COMPLETO y se responde de a una, con el nombre de pila
+| y la inicial. Nunca un listado, nunca el teléfono ni el correo de vuelta: la
+| base de clientas es del negocio, y esto sirve para confirmar quién vino, no
+| para llevarse nada.
+*/
+
+export interface ClientIdentity {
+  id: number
+  display_name: string
+}
+
+export function useClientLookup() {
+  return useMutation({
+    mutationFn: async (phone: string) =>
+      (
+        await httpClient.get<{ found: boolean; client?: ClientIdentity }>('/clients/lookup', {
+          params: { phone },
+        })
+      ).data,
+  })
+}
+
+export function useQuickClient() {
+  return useMutation({
+    mutationFn: async (payload: { name: string; phone: string }) =>
+      (await httpClient.post<{ client: ClientIdentity }>('/clients/quick', payload)).data.client,
+  })
+}
+
+export function useAttachClient() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ appointmentId, clientId }: { appointmentId: number; clientId: number }) =>
+      (
+        await httpClient.patch<{ client: ClientIdentity }>(
+          `/appointments/${appointmentId}/client`,
+          { client_id: clientId },
+        )
+      ).data.client,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] })
+    },
+  })
+}
+
+/*
+|------------------------------------------------------------------------------
 | Etapas
 |------------------------------------------------------------------------------
 | El estado de una cita con el vocabulario del negocio. "Confirmada" y
