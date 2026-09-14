@@ -197,6 +197,21 @@ export function useRegisterDeposit() {
   })
 }
 
+/**
+ * Una cita suelta, por id.
+ *
+ * Hace falta porque "lo que atendió y no cobró" NO cabe en un día: puede ser
+ * del jueves. La lista de la agenda se carga por fecha, así que buscar ahí una
+ * cita de otro día nunca la encuentra.
+ */
+export function useAppointment(id: Ref<number | null>) {
+  return useQuery({
+    queryKey: ['appointments', 'one', id],
+    enabled: () => id.value !== null,
+    queryFn: async () => (await httpClient.get<Appointment>(`/appointments/${id.value}`)).data,
+  })
+}
+
 /*
 |------------------------------------------------------------------------------
 | Identificar a quien se tiene delante

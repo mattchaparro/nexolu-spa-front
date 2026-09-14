@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import { useSystemAlert } from '@/composables/useSystemAlert'
 import { useAuthStore } from '@/stores/auth.store'
 import { NxButton } from '@/ui'
 
 import CheckoutModal from '@/modules/agenda/components/CheckoutModal.vue'
-import { useAppointments, type Appointment } from '@/modules/agenda/composables/useAppointments'
+import {
+  useAppointment,
+  useAppointments,
+  type Appointment,
+} from '@/modules/agenda/composables/useAppointments'
 import { useMoney } from '@/modules/cash/composables/useMoney'
 import { toLocalDateIso } from '@/utils/toLocalDateIso'
 
@@ -28,14 +32,64 @@ const toCheckout = ref<Appointment | null>(null)
 
 const myResourceId = computed(() => data.value?.resource?.id ?? null)
 
-function charge(appointmentId: number): void {
-  const full = appointments.value?.find((a) => a.id === appointmentId)
+/*
+ * Cobrar una cita, sea de hoy o de la semana pasada.
+ *
+ * Antes se buscaba dentro de la lista de HOY, y "lo que atendió y no cobró" no
+ * cabe en un día -- ese es justamente el punto de esa lista, que no se pierda
+ * ninguna. Una cita del jueves nunca estaba ahí y quien iba a cobrarla veía
+ * "no encontramos esa cita, recarga la página": un mensaje que además proponía
+ * algo que no arreglaba nada, porque recargar volvía a traer sólo el día de
+ * hoy.
+ *
+ * Si está en la lista del día se usa esa -- es instantáneo y es el caso
+ * normal. Si no, se pide por id.
+ */
+const pidiendoCita = ref<number | null>(null)
+const { data: citaPedida, isFetching: buscandoCita } = useAppointment(pidiendoCita)
 
-  if (full) {
-    toCheckout.value = full
-  } else {
-    notify('No encontramos esa cita. Recarga la página.', 'warn')
+function charge(appointmentId: number): void {
+  const enElDia = appointments.value?.find((a) => a.id === appointmentId)
+
+  if (enElDia) {
+    toCheckout.value = enElDia
+
+    return
   }
+
+  pidiendoCita.value = appointmentId
+}
+
+// Llegó la que se pidió por id: se abre el cobro con ella.
+watch(citaPedida, (cita) => {
+  if (cita) {
+    toCheckout.value = cita
+    pidiendoCita.value = null
+  }
+})
+
+/*
+ * Los manejadores de dos pasos van en funciones, NO en la plantilla.
+ *
+ * Un `@saved="a = false
+ notify(...)"` sin punto y coma lo rechaza el
+ * compilador de plantillas de Vue, y la vista deja de cargar entera. Pasa solo:
+ * se escribe en una linea, Prettier la parte en dos, y nadie lo nota hasta que
+ * la pantalla no abre. Ya ocurrio antes -- por eso existe `routes.spec.ts`.
+ */
+function onWalkInSaved(): void {
+  walkInOpen.value = false
+  notify('Servicio registrado.', 'success')
+}
+
+function onCobrado(): void {
+  toCheckout.value = null
+  notify('Cobrado. La comisión quedó registrada.', 'success')
+}
+
+function onCancelada(): void {
+  toCheckout.value = null
+  notify('Cita cancelada.', 'success')
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -62,10 +116,7 @@ const STATUS_LABELS: Record<string, string> = {
 
     <p v-if="isLoading" class="text-sm text-slate-500">Cargando…</p>
 
-    <p
-      v-else-if="!data?.resource"
-      class="rounded-md bg-slate-100 px-4 py-6 text-sm text-slate-600"
-    >
+    <p v-else-if="!data?.resource" class="rounded-md bg-slate-100 px-4 py-6 text-sm text-slate-600">
       {{ data?.message ?? 'Tu usuario no está asociado a nadie de la agenda.' }}
     </p>
 
@@ -89,10 +140,13 @@ const STATUS_LABELS: Record<string, string> = {
               <span class="tabular-nums">{{ pending.label }}</span>
               · {{ pending.client_name }} · {{ pending.service_name }}
             </span>
+            <!-- `loading` mientras se pide la cita: si es de otro dia hay un
+                 viaje al servidor, y sin esto se puede tocar dos veces. -->
             <NxButton
               v-if="auth.can('caja.cobrar')"
               variant="outline"
               size="sm"
+              :loading="buscandoCita && pidiendoCita === pending.id"
               @click="charge(pending.id)"
             >
               Cobrar
@@ -133,7 +187,10 @@ const STATUS_LABELS: Record<string, string> = {
         Mi agenda de hoy
       </h2>
 
-      <p v-if="!data.agenda.length" class="rounded-md bg-slate-100 px-4 py-6 text-sm text-slate-600">
+      <p
+        v-if="!data.agenda.length"
+        class="rounded-md bg-slate-100 px-4 py-6 text-sm text-slate-600"
+      >
         No tienes citas hoy.
       </p>
 
@@ -174,14 +231,14 @@ const STATUS_LABELS: Record<string, string> = {
       :open="walkInOpen"
       :my-resource-id="myResourceId"
       @close="walkInOpen = false"
-      @saved="walkInOpen = false; notify('Servicio registrado.', 'success')"
+      @saved="onWalkInSaved"
     />
 
     <CheckoutModal
       :appointment="toCheckout"
       @close="toCheckout = null"
-      @done="toCheckout = null; notify('Cobrado. La comisión quedó registrada.', 'success')"
-      @cancelled="toCheckout = null; notify('Cita cancelada.', 'success')"
+      @done="onCobrado"
+      @cancelled="onCancelada"
     />
   </section>
 </template>
