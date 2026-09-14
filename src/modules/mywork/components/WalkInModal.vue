@@ -10,8 +10,19 @@ import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 import { searchClients, type ClientOption } from '@/modules/agenda/composables/useAppointments'
 import { useServices } from '@/modules/agenda/composables/useAvailability'
 import { useMoney } from '@/modules/cash/composables/useMoney'
+import { toLocalDateIso } from '@/utils/toLocalDateIso'
 
 import { useWalkIn } from '../composables/useMyWork'
+
+/*
+ * El día que se está registrando sobrevive al cierre del modal.
+ *
+ * Es fuera del componente a propósito. Ponerse al día no es registrar UN
+ * servicio: Alejandra abre esto ocho veces seguidas para el sábado pasado, y
+ * si cada vez vuelve a "hoy", a la tercera se le pasa cambiarlo y el servicio
+ * queda en el día equivocado -- con su comisión y el cierre de caja detrás.
+ */
+const ultimaFecha = ref(toLocalDateIso())
 
 const props = defineProps<{
   open: boolean
@@ -48,6 +59,29 @@ const price = ref('')
 const chargeNow = ref(true)
 const error = ref<string | null>(null)
 
+const fecha = ref(ultimaFecha.value)
+const hora = ref('')
+
+const hoy = toLocalDateIso()
+const esDeHoy = computed(() => fecha.value === hoy)
+
+/** Cómo se lee el día que quedó elegido, para poder confirmarlo de un vistazo. */
+const diaElegido = computed(() =>
+  new Date(`${fecha.value}T12:00`).toLocaleDateString('es-CO', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  }),
+)
+
+/** La hora a la que habría empezado si termina justo ahora. */
+function horaSugerida(): string {
+  const d = new Date(Date.now() - (service.value?.duration_min ?? 60) * 60_000)
+  d.setMinutes(Math.floor(d.getMinutes() / 5) * 5, 0, 0)
+
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
 const service = computed(() => services.value?.find((s) => s.id === serviceId.value) ?? null)
 
 /** Quien no atiende tiene que decir quién lo hizo. */
@@ -77,8 +111,19 @@ watch(
     price.value = ''
     chargeNow.value = true
     error.value = null
+    fecha.value = ultimaFecha.value
+    hora.value = fecha.value === hoy ? horaSugerida() : hora.value || '10:00'
   },
 )
+
+/*
+ * Nunca hacia adelante. Esto registra lo que YA se hizo -- un servicio con
+ * fecha de mañana ensucia el cierre de un día que todavía no existe -- y en un
+ * campo de fecha en el celular tocar el año de más es de lo más fácil.
+ */
+watch(fecha, (valor) => {
+  if (valor > hoy) fecha.value = hoy
+})
 
 watch(service, (s) => {
   // El precio de lista como punto de partida, editable: un servicio sin cita
@@ -110,9 +155,15 @@ async function submit(): Promise<void> {
       client_id: selected.value?.id ?? null,
       client_name: selected.value?.full_name ?? term.value.trim(),
       client_phone: selected.value ? undefined : phone.value.trim() || undefined,
+      // El servidor la interpreta en la zona del negocio, no en la del
+      // teléfono: la cita es a las 2 de la tarde en el local, pase lo que pase
+      // con el reloj de quien la registra.
+      started_at: `${fecha.value}T${hora.value || '10:00'}`,
       payment_method_id: chargeNow.value ? methodId.value : null,
       final_price: chargeNow.value && price.value !== '' ? Number(price.value) : undefined,
     })
+    // Se recuerda para el siguiente: ponerse al día son varios del mismo día.
+    ultimaFecha.value = fecha.value
     emit('saved')
   } catch (e) {
     error.value = extractErrorMessage(e, 'No pudimos registrar el servicio.')
@@ -124,8 +175,8 @@ async function submit(): Promise<void> {
   <NxModal :model-value="open" title="Servicio sin cita" @update:model-value="emit('close')">
     <div class="flex flex-col gap-4">
       <p class="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">
-        Para alguien que llegó sin agendar. Queda registrado igual que una cita:
-        cuenta para tu comisión y para el cierre del día.
+        Para alguien que llegó sin agendar, o para registrar un servicio que ya hiciste otro día.
+        Queda igual que una cita: cuenta para tu comisión y para el cierre de ese día.
       </p>
 
       <NxSelect
@@ -146,6 +197,23 @@ async function submit(): Promise<void> {
         label="¿Quién atendió?"
         :disabled="isPending"
       />
+
+      <!-- Cuándo fue. Va arriba y no escondido en "avanzado": el día decide en
+           qué cierre de caja cae la plata y en qué corte la comisión. -->
+      <div class="grid grid-cols-2 gap-3">
+        <NxInput v-model="fecha" type="date" label="¿Qué día?" :disabled="isPending" />
+        <NxInput v-model="hora" type="time" label="¿A qué hora?" :disabled="isPending" />
+      </div>
+
+      <!-- Se confirma el día en palabras. Un teclado numérico en un date input
+           es justo donde uno escribe 08 en vez de 09 y no lo nota. -->
+      <p
+        v-if="!esDeHoy"
+        class="rounded-md border-l-4 border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+      >
+        Se registrará el <span class="font-medium">{{ diaElegido }}</span
+        >, no hoy.
+      </p>
 
       <div class="relative">
         <NxInput v-model="term" label="Cliente" :disabled="isPending" autocomplete="off" />
@@ -209,7 +277,9 @@ async function submit(): Promise<void> {
       <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
 
       <div class="flex justify-end gap-2">
-        <NxButton variant="secondary" :disabled="isPending" @click="emit('close')">Cancelar</NxButton>
+        <NxButton variant="secondary" :disabled="isPending" @click="emit('close')"
+          >Cancelar</NxButton
+        >
         <NxButton :loading="isPending" :disabled="!canSubmit" @click="submit">Registrar</NxButton>
       </div>
     </div>

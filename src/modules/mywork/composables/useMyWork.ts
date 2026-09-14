@@ -63,6 +63,14 @@ export interface WalkInPayload {
   client_id?: number | null
   client_name?: string
   client_phone?: string
+  /**
+   * Cuándo se prestó, en hora local del negocio (`2026-09-11T14:30`).
+   *
+   * Sin esto el servidor asume "ahora", que sirve para el caso normal y no
+   * para ponerse al día: quien registra el miércoles lo del sábado necesita
+   * que quede en el sábado, o la comisión y el cierre de ese día quedan mal.
+   */
+  started_at?: string
   payment_method_id?: number | null
   final_price?: number
   notes?: string
@@ -80,12 +88,19 @@ export function useWalkIn() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (payload: WalkInPayload) =>
-      (await httpClient.post('/walk-in', payload)).data,
+    mutationFn: async (payload: WalkInPayload) => (await httpClient.post('/walk-in', payload)).data,
     // Un servicio sin cita es una cita normal por dentro: toca la agenda, la
     // disponibilidad, la caja y la ficha del cliente.
     onSuccess: () => {
-      for (const key of [['my-work'], ['agenda'], ['availability'], ['appointments'], ['cash'], ['daily-summary'], ['clients']]) {
+      for (const key of [
+        ['my-work'],
+        ['agenda'],
+        ['availability'],
+        ['appointments'],
+        ['cash'],
+        ['daily-summary'],
+        ['clients'],
+      ]) {
         queryClient.invalidateQueries({ queryKey: key })
       }
     },
