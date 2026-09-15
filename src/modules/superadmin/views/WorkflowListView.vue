@@ -107,12 +107,27 @@ function templateOf(stage: Partial<WorkflowStage>, type: string): string {
 }
 
 function setTemplate(index: number, type: string, value: string): void {
+  setActionConfig(index, type, 'template', value)
+}
+
+// El nombre del flujo de Nexolú Connect que dispara la acción
+// «Iniciar un flujo de WhatsApp» (config ['flow'] en el catálogo).
+function flowOf(stage: Partial<WorkflowStage>, type: string): string {
+  const action = ((stage.actions ?? []) as StageAction[]).find((a) => a.type === type)
+  return (action?.config?.flow as string) ?? ''
+}
+
+function setFlow(index: number, type: string, value: string): void {
+  setActionConfig(index, type, 'flow', value)
+}
+
+function setActionConfig(index: number, type: string, key: string, value: string): void {
   draft.value = draft.value.map((s, i) =>
     i === index
       ? {
           ...s,
           actions: ((s.actions ?? []) as StageAction[]).map((a) =>
-            a.type === type ? { ...a, config: { ...a.config, template: value } } : a,
+            a.type === type ? { ...a, config: { ...a.config, [key]: value } } : a,
           ),
         }
       : s,
@@ -298,6 +313,32 @@ async function create(): Promise<void> {
                     :key="ph"
                     class="ml-1 rounded bg-slate-100 px-1 text-slate-600"
                   >{{ '{' + ph + '}' }}</code>
+                </p>
+              </div>
+
+              <!-- Acciones con flujo de Connect: el nombre del flujo va aquí.
+                   Sin este campo, el chip se activaba pero la acción quedaba
+                   sin flujo configurado y se omitía siempre. -->
+              <div
+                v-for="action in (data?.actions ?? []).filter(
+                  (a) => a.config.includes('flow') && hasAction(stage, a.type),
+                )"
+                :key="`f-${action.type}`"
+                class="mt-3"
+              >
+                <label class="mb-1 block text-xs text-slate-500">
+                  Flujo de «{{ action.label }}»
+                </label>
+                <input
+                  :value="flowOf(stage, action.type)"
+                  type="text"
+                  class="w-full rounded border border-slate-200 px-2 py-1 text-sm text-slate-800"
+                  placeholder="post_agenda"
+                  @input="setFlow(index, action.type, ($event.target as HTMLInputElement).value)"
+                />
+                <p class="mt-1 text-xs text-slate-500">
+                  El nombre del flujo creado en el panel de Nexolú Connect. El flujo recibe las
+                  mismas variables de las plantillas ({cliente}, {fecha}, {hora}, {mis_citas}...).
                 </p>
               </div>
             </div>
