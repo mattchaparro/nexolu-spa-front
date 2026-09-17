@@ -265,20 +265,34 @@ async function cerrarOAbrir() {
                 class="flex"
                 :class="m.direction === 'in' ? 'justify-start' : 'justify-end'"
               >
+                <!--
+                  Las notas de equipo (kind 'equipo', p.ej. el relevo a humano
+                  que pide un flujo de Connect) NUNCA salieron por WhatsApp:
+                  se pintan ámbar para que nadie crea que la clienta las vio.
+                -->
                 <div
                   class="max-w-[80%] rounded-lg px-3 py-2 text-sm"
                   :class="
-                    m.direction === 'in'
-                      ? 'bg-slate-100 text-slate-800'
-                      : 'bg-emerald-600 text-white'
+                    m.kind === 'equipo'
+                      ? 'border border-amber-200 bg-amber-50 text-amber-900'
+                      : m.direction === 'in'
+                        ? 'bg-slate-100 text-slate-800'
+                        : 'bg-emerald-600 text-white'
                   "
                 >
                   <p class="whitespace-pre-line">{{ m.body }}</p>
                   <p
                     class="mt-1 text-[11px]"
-                    :class="m.direction === 'in' ? 'text-slate-400' : 'text-emerald-100'"
+                    :class="
+                      m.kind === 'equipo'
+                        ? 'text-amber-600'
+                        : m.direction === 'in'
+                          ? 'text-slate-400'
+                          : 'text-emerald-100'
+                    "
                   >
                     {{ hora(m.at) }}
+                    <span v-if="m.kind === 'equipo'"> · nota interna, la clienta no la ve</span>
                     <span v-if="m.kind === 'agente'"> · agente</span>
                     <span v-if="m.status === 'fallido'"> · no salió</span>
                   </p>
