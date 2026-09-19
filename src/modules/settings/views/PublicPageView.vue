@@ -39,6 +39,8 @@ const form = ref<Record<string, string>>({
   whatsapp: '',
   maps_url: '',
   google_review_url: '',
+  comunicado: '',
+  comunicado_hasta: '',
 })
 
 /**
@@ -200,6 +202,47 @@ async function copyLink(url?: string): Promise<void> {
                 Copiar
               </button>
             </div>
+          </div>
+        </div>
+
+        <!--
+          El aviso del momento. Va primero porque es lo que cambia semana a
+          semana, mientras que la descripción del negocio se escribe una vez.
+        -->
+        <div class="rounded-lg border border-amber-200 bg-amber-50/40 p-5">
+          <h2 class="mb-1 text-sm font-medium text-slate-800">📣 Aviso para tus clientas</h2>
+          <p class="mb-4 text-xs text-slate-600">
+            Sale arriba del menú de WhatsApp y el asistente lo tiene en cuenta al responder.
+            Para cosas del día a día: «Alejandra no estará el jueves», «ya volvimos de
+            vacaciones».
+          </p>
+
+          <div class="flex flex-col gap-4">
+            <label class="text-sm text-slate-700">
+              {{ data.labels.comunicado }}
+              <textarea
+                v-model="form.comunicado"
+                rows="2"
+                maxlength="300"
+                class="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-slate-800"
+                placeholder="Ej: Esta semana atendemos hasta las 6 pm."
+                :disabled="saving"
+              />
+            </label>
+
+            <label class="text-sm text-slate-700 sm:w-64">
+              {{ data.labels.comunicado_hasta }}
+              <input
+                v-model="form.comunicado_hasta"
+                type="date"
+                class="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-slate-800"
+                :disabled="saving"
+              />
+              <span class="mt-1 block text-xs text-slate-500">
+                Después de ese día deja de mostrarse solo. Si la dejas vacía, se muestra
+                hasta que lo borres.
+              </span>
+            </label>
           </div>
         </div>
 
