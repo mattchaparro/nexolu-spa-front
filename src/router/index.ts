@@ -141,6 +141,21 @@ export const routes: RouteRecordRaw[] = [
   },
   {
     /*
+     * La misma bandeja, pero la de Connect, mostrada acá adentro.
+     *
+     * Existe al lado de `/whatsapp` y no en su lugar mientras se prueba
+     * con gente de verdad: la de acá funciona y no se apaga hasta que la
+     * otra esté probada en el mostrador. Cuando lo esté, esta ruta toma
+     * `/whatsapp` y `InboxView.vue` se borra -- ese es el punto, tener
+     * una sola.
+     */
+    path: '/whatsapp/chat',
+    name: 'chat-connect',
+    component: () => import('@/modules/messages/views/ChatConnectView.vue'),
+    meta: { permission: 'clientes.ver' },
+  },
+  {
+    /*
      * La bandeja de salida.
      *
      * Con `citas.ver` y sin bandera de función: quien atiende el mostrador es
