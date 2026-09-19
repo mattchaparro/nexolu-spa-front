@@ -61,9 +61,12 @@ async function cambiarFamilia(grupo: { nombre: string; items: AdminService[]; en
   const esconder = grupo.enLinea > 0
   const afectados = grupo.items.filter((s) => s.is_active)
 
+  // Se nombra WhatsApp porque este interruptor también apaga el bot: si
+  // solo dijera "página pública", el local escondería las pestañas y
+  // seguiría recibiendo citas de pestañas por chat.
   const pregunta = esconder
-    ? `¿Esconder los ${afectados.length} servicios de "${grupo.nombre}" de la página pública? Se siguen pudiendo cobrar en el local.`
-    : `¿Volver a mostrar los ${afectados.length} servicios de "${grupo.nombre}" en la página pública?`
+    ? `¿Esconder los ${afectados.length} servicios de "${grupo.nombre}" de la página pública y de WhatsApp? Se siguen pudiendo cobrar en el local.`
+    : `¿Volver a mostrar los ${afectados.length} servicios de "${grupo.nombre}" en la página pública y en WhatsApp?`
 
   if (!window.confirm(pregunta)) return
 

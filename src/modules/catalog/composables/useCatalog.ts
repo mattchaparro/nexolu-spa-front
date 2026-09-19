@@ -28,11 +28,16 @@ export interface AdminService {
 }
 
 /**
- * Esconder o mostrar varios servicios en la página pública, de una.
+ * Esconder o mostrar varios servicios de cara al público, de una.
  *
  * El caso que lo pidió: renunció la lashista. Servicio por servicio son nueve
  * idas al formulario para apagar el mismo interruptor, y otras nueve para
  * volver a ponerlas.
+ *
+ * "De cara al público" son DOS puertas, no una: la página y el bot de
+ * WhatsApp leen el mismo `is_bookable_online`. Apagarlo acá también deja
+ * de ofrecerlo por chat -- que es lo que se espera cuando alguien
+ * esconde una familia entera porque ya no hay quién la preste.
  */
 export function useBulkServiceVisibility() {
   const queryClient = useQueryClient()
