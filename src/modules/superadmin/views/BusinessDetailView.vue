@@ -101,6 +101,9 @@ const SETTING_LABELS: Record<string, string> = {
   min_cancellation_notice_min: 'Anticipación mínima para cancelar (min)',
   max_booking_horizon_days: 'Se puede reservar hasta (días)',
   no_show_penalty_amount: 'Multa por inasistencia',
+  // Vacío = la misma de inasistencia. Cancelar tarde por WhatsApp se
+  // permite (libera la silla) y esta multa queda en la ficha.
+  late_cancellation_penalty_amount: 'Multa por cancelación tardía (vacío = la de inasistencia)',
 }
 
 async function save(): Promise<void> {
@@ -119,8 +122,13 @@ async function save(): Promise<void> {
         value === null || String(value).trim() === '' ? null : Number(value),
       ]),
     ),
+    // Un campo vacío viaja como null ("usa el valor por defecto"), no como
+    // 0: Number('') es 0, y para la multa tardía 0 significa "sin multa".
     scheduling_settings: Object.fromEntries(
-      Object.entries(settings.value).map(([key, value]) => [key, Number(value)]),
+      Object.entries(settings.value).map(([key, value]) => [
+        key,
+        value === null || String(value).trim() === '' ? null : Number(value),
+      ]),
     ),
   })
   notify('Negocio actualizado.', 'success')
