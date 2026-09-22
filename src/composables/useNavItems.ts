@@ -177,6 +177,12 @@ const ITEMS: Array<NavItem & { permission?: string; onlyStaff?: boolean }> = [
     featureKey: 'loyalty',
   },
   {
+    label: 'Enséñale al bot',
+    icon: 'pi pi-comments',
+    routeName: 'bot-knowledge',
+    permission: 'ia.conocimiento',
+  },
+  {
     label: 'Medios de pago',
     icon: 'pi pi-credit-card',
     routeName: 'payment-methods',

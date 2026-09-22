@@ -123,6 +123,13 @@ export const routes: RouteRecordRaw[] = [
     meta: { permission: 'negocio.configurar' },
   },
   {
+    // Las preguntas frecuentes que el bot de WhatsApp responde solo.
+    path: '/configuracion/bot',
+    name: 'bot-knowledge',
+    component: () => import('@/modules/settings/views/BotKnowledgeView.vue'),
+    meta: { permission: 'ia.conocimiento' },
+  },
+  {
     path: '/configuracion/pagina-publica',
     name: 'public-page',
     component: () => import('@/modules/settings/views/PublicPageView.vue'),
