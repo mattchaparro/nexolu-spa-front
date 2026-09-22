@@ -19,6 +19,8 @@ export interface AdminService {
   buffer_before_min: number
   buffer_after_min: number
   occupied_min: number
+  /** Cada cuántos días se retoca. `null` = el default (20); `0` = no se retoca. */
+  retouch_days: number | null
   price: number
   is_bookable_online: boolean
   is_active: boolean

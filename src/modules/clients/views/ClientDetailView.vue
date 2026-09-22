@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 
 import { useSystemAlert } from '@/composables/useSystemAlert'
 import { useAuthStore } from '@/stores/auth.store'
-import { NxButton, NxInput } from '@/ui'
+import { NxButton, NxInput, NxSwitch } from '@/ui'
 
 import {
   STATUS_LABELS,
@@ -34,6 +34,7 @@ const email = ref('')
 const notes = ref('')
 const careNotes = ref('')
 const caption = ref('')
+const acceptsMarketing = ref(true)
 
 watch(
   client,
@@ -45,6 +46,7 @@ watch(
     email.value = c.email ?? ''
     notes.value = c.notes ?? ''
     careNotes.value = c.care_notes ?? ''
+    acceptsMarketing.value = c.accepts_marketing
   },
   { immediate: true },
 )
@@ -74,6 +76,7 @@ async function save(): Promise<void> {
       email: email.value.trim() || null,
       notes: notes.value.trim() || null,
       care_notes: careNotes.value.trim() || null,
+      accepts_marketing: acceptsMarketing.value,
     })
     notify('Ficha actualizada.', 'success')
   } catch (e) {
@@ -371,6 +374,19 @@ function whatsappLink(c: {
             :disabled="saving"
           />
           <NxInput v-model="notes" label="Notas generales" :disabled="saving" />
+
+          <!-- La baja se la da ella misma por WhatsApp, pero el equipo tiene
+               que poder VERLA: si no, alguien la mete en una campaña y no
+               entiende por qué no le llegó. -->
+          <div>
+            <div class="flex items-center">
+              <NxSwitch v-model="acceptsMarketing" :disabled="saving" />
+              <span class="ml-2 text-sm text-slate-600">Acepta promociones y avisos de retoque</span>
+            </div>
+            <p v-if="!acceptsMarketing" class="mt-1 text-xs text-slate-500">
+              Se dio de baja. Le siguen llegando la confirmación y el recordatorio de sus citas.
+            </p>
+          </div>
 
           <NxButton
             v-if="auth.can('clientes.gestionar')"

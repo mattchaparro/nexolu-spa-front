@@ -22,6 +22,8 @@ const description = ref('')
 const duration = ref('45')
 const bufferBefore = ref('0')
 const bufferAfter = ref('0')
+/** Vacío = el default de la plataforma (20 días). 0 = no se retoca. */
+const retouchDays = ref('')
 const price = ref('0')
 const commission = ref('30')
 const bookableOnline = ref(true)
@@ -47,6 +49,7 @@ watch(
     duration.value = String(s?.duration_min ?? 45)
     bufferBefore.value = String(s?.buffer_before_min ?? 0)
     bufferAfter.value = String(s?.buffer_after_min ?? 0)
+    retouchDays.value = s?.retouch_days == null ? '' : String(s.retouch_days)
     price.value = String(s?.price ?? 0)
     commission.value = '30'
     bookableOnline.value = s?.is_bookable_online ?? true
@@ -105,6 +108,13 @@ async function submit(): Promise<void> {
         duration_min: Number(duration.value),
         buffer_before_min: Number(bufferBefore.value || 0),
         buffer_after_min: Number(bufferAfter.value || 0),
+        /*
+         * Cadena vacía y no `null`: el multipart de servicios OMITE los
+         * nulos, así que borrar el campo para volver al default no llegaría
+         * nunca al servidor y se quedaría con el número viejo, en silencio.
+         * Laravel convierte la cadena vacía en null antes de validar.
+         */
+        retouch_days: retouchDays.value.trim() === '' ? '' : Number(retouchDays.value),
         price: Number(price.value),
         commission_rate: Number(commission.value) / 100,
         is_bookable_online: bookableOnline.value,
@@ -163,6 +173,22 @@ async function submit(): Promise<void> {
           <NxSwitch v-model="bookableOnline" :disabled="isPending" />
           <span class="ml-2 text-sm text-slate-600">Reservable en línea</span>
         </div>
+      </div>
+
+      <!-- Cada cuánto se retoca: de acá sale el mensaje que trae de vuelta a
+           la clienta, así que el campo explica qué pasa si se deja vacío. -->
+      <div>
+        <NxInput
+          v-model="retouchDays"
+          label="Retoque cada (días)"
+          inputmode="numeric"
+          placeholder="20"
+          :disabled="isPending"
+        />
+        <p class="mt-1 text-xs text-slate-500">
+          Cuando pasen esos días le escribimos para invitarla a volver. Vacío usa
+          <b>20 días</b>; escribe <b>0</b> si este servicio no se retoca.
+        </p>
       </div>
 
       <div>
