@@ -73,7 +73,19 @@ export const routes: RouteRecordRaw[] = [
 
   {
     path: '/',
-    redirect: { name: 'agenda' },
+    /*
+     * Quien atiende entra a SU día; quien coordina, a la agenda del negocio.
+     *
+     * Lo decide `citas.ver_todas`, que es justo la diferencia: recepción y
+     * administración ven la agenda entera, una manicurista ve la suya. Antes
+     * todo el mundo caía en la agenda del negocio -- para ella, una pantalla
+     * con las citas de todas, donde lo suyo hay que buscarlo.
+     */
+    redirect: () => {
+      const auth = useAuthStore()
+
+      return { name: auth.can('citas.ver_todas') ? 'agenda' : 'my-work' }
+    },
   },
   {
     path: '/agenda',

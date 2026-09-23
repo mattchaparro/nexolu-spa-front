@@ -19,6 +19,21 @@ export interface AgendaRow {
   total: number | null
 }
 
+/** Una liquidación ya pagada, con el desglose que ella revisa. */
+export interface MyPayment {
+  id: number
+  period_start: string | null
+  period_end: string | null
+  paid_at: string | null
+  services_count: number
+  commission_total: number
+  base_total: number
+  bonus_total: number
+  deduction_total: number
+  net_total: number
+  notes: string | null
+}
+
 export interface MyWork {
   resource: { id: number; name: string } | null
   message?: string
@@ -33,6 +48,7 @@ export interface MyWork {
   }>
   agenda: AgendaRow[]
   ratings: MyRatings
+  payments: MyPayment[]
 }
 
 /**
