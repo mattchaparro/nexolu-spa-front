@@ -73,6 +73,8 @@ export interface TeamResource {
   commission_rate: number | null
   /** La reseña corta de la página pública. */
   bio: string | null
+  /** Su WhatsApp: a dónde le llegan los avisos de sus citas. */
+  phone?: string | null
   /** Si sale en la sección de colaboradores. */
   is_public: boolean
 }

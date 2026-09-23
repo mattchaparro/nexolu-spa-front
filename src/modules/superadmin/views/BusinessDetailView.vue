@@ -57,6 +57,8 @@ const timezone = ref('')
 const plan = ref<string | null>(null)
 const flags = ref<Record<string, boolean>>({})
 const settings = ref<Record<string, number>>({})
+/** Avisarle al equipo por WhatsApp. Aparte: es el único ajuste de agenda que no es un número. */
+const notifyTeam = ref(false)
 /**
  * Topes del plan. Vacío = sin tope para ese negocio.
  *
@@ -89,6 +91,7 @@ watch(
     // apagar algo heredado del plan no tuviera ningún efecto visible.
     flags.value = { ...b.resolved_features }
     settings.value = { ...b.scheduling_settings }
+    notifyTeam.value = Boolean(b.scheduling_settings?.notify_team_whatsapp)
     limits.value = { ...(b.resolved_limits ?? {}) }
     workflowId.value = b.appointment_workflow_id ?? null
   },
@@ -124,12 +127,20 @@ async function save(): Promise<void> {
     ),
     // Un campo vacío viaja como null ("usa el valor por defecto"), no como
     // 0: Number('') es 0, y para la multa tardía 0 significa "sin multa".
-    scheduling_settings: Object.fromEntries(
-      Object.entries(settings.value).map(([key, value]) => [
-        key,
-        value === null || String(value).trim() === '' ? null : Number(value),
-      ]),
-    ),
+    scheduling_settings: {
+      ...Object.fromEntries(
+        Object.entries(settings.value)
+          // El interruptor viaja aparte: `Number(true)` es 1 y se guardaría
+          // como número, que es lo que hace que un ajuste booleano termine
+          // valiendo "1" en una base y `true` en otra.
+          .filter(([key]) => key !== 'notify_team_whatsapp')
+          .map(([key, value]) => [
+            key,
+            value === null || String(value).trim() === '' ? null : Number(value),
+          ]),
+      ),
+      notify_team_whatsapp: notifyTeam.value,
+    },
   })
   notify('Negocio actualizado.', 'success')
 }
@@ -263,6 +274,16 @@ async function save(): Promise<void> {
               inputmode="numeric"
               :disabled="isPending"
             />
+
+            <!-- Este no es un número: avisarle al equipo se prende o no.
+                 Apagado por defecto, porque encenderlo significa empezar a
+                 escribirle al equipo del negocio a nombre del salón. -->
+            <div class="flex items-center pt-1">
+              <NxSwitch v-model="notifyTeam" :disabled="isPending" />
+              <span class="ml-2 text-sm text-slate-600">
+                Avisarle por WhatsApp al equipo cuando le agenden o le cancelen
+              </span>
+            </div>
           </div>
         </article>
       </div>

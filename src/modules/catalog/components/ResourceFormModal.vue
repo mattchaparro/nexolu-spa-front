@@ -88,7 +88,7 @@ watch(
     color.value = r?.color ?? '#4f46e5'
     email.value = ''
     password.value = ''
-    phone.value = ''
+    phone.value = r?.phone ?? ''
     role.value = 'staff'
     // El formulario habla en porcentaje (50); la API guarda fracción (0.50).
     commission.value = r?.commission_rate != null ? String(Math.round(r.commission_rate * 100)) : ''
@@ -122,6 +122,7 @@ async function submit(): Promise<void> {
         color: color.value,
         commission_rate: commissionRate,
         bio: bio.value.trim() || null,
+        phone: phone.value.trim() || null,
         is_public: isPublic.value,
         // Sólo se manda si de verdad cambió: el servidor rechaza el traslado
         // de quien tiene citas pendientes, y no tiene sentido arriesgar ese
@@ -138,6 +139,7 @@ async function submit(): Promise<void> {
         color: color.value,
         commission_rate: commissionRate,
         bio: bio.value.trim() || null,
+        phone: phone.value.trim() || null,
         is_public: isPublic.value,
         ...(isPerson.value && email.value.trim()
           ? {
@@ -252,6 +254,17 @@ async function submit(): Promise<void> {
         </p>
       </div>
 
+      <!-- Su WhatsApp. Es de la PERSONA, no de su cuenta del sistema:
+           muchas manicuristas no tienen con qué entrar y aun así quieren
+           saber que les agendaron. -->
+      <div v-if="isPerson">
+        <NxInput v-model="phone" label="WhatsApp (opcional)" inputmode="tel" :disabled="isPending" />
+        <p class="mt-1 text-xs text-slate-500">
+          Si el negocio tiene encendidos los avisos al equipo, aquí le llega cuando le agenden o le
+          cancelen una cita. Vacío = no recibe nada.
+        </p>
+      </div>
+
       <!-- La reseña de la página pública. Corta a propósito: la lee alguien en
            el navegador de WhatsApp con media pantalla. -->
       <div v-if="isPerson">
@@ -305,15 +318,12 @@ async function submit(): Promise<void> {
 
         <div class="flex flex-col gap-3">
           <NxInput v-model="email" type="email" label="Correo" :disabled="isPending" />
-          <div class="grid gap-3 sm:grid-cols-2">
-            <NxInput
-              v-model="password"
-              type="password"
-              label="Contraseña"
-              :disabled="isPending || !email.trim()"
-            />
-            <NxInput v-model="phone" label="Teléfono" inputmode="tel" :disabled="isPending" />
-          </div>
+          <NxInput
+            v-model="password"
+            type="password"
+            label="Contraseña"
+            :disabled="isPending || !email.trim()"
+          />
           <NxSelect
             v-model="role"
             :options="ROLES"
