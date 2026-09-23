@@ -23,10 +23,21 @@ const props = withDefaults(
 
 defineEmits<{ 'update:modelValue': [value: boolean] }>()
 
+/*
+ * El ancho nunca pasa del celular.
+ *
+ * Con `w-full max-w-md` (448px) el modal se salia de una pantalla de 375: en
+ * «Servicio sin cita» quedaban cortados el texto de ayuda, la hora y los
+ * botones. Se vio probando en el telefono, que es justo donde una manicurista
+ * registra lo que acaba de hacer.
+ *
+ * `calc(100vw-2rem)` deja un margen a cada lado y el `max-w-*` sigue mandando
+ * en pantallas grandes.
+ */
 const sizeClasses: Record<'sm' | 'md' | 'lg', string> = {
-  sm: 'w-full max-w-sm',
-  md: 'w-full max-w-md',
-  lg: 'w-full max-w-lg',
+  sm: 'w-[calc(100vw-2rem)] max-w-sm',
+  md: 'w-[calc(100vw-2rem)] max-w-md',
+  lg: 'w-[calc(100vw-2rem)] max-w-lg',
 }
 </script>
 

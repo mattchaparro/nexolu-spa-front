@@ -287,7 +287,12 @@ async function submit(): Promise<void> {
            "se cobró" y dispara ese aviso. Confirmar una cita y que la pantalla
            anuncie un cobro que no ocurrió es peor que no avisar nada. La
            rejilla se refresca sola por invalidación. -->
-      <div class="border-b border-slate-100 pb-4">
+      <!-- Sólo para quien gestiona la agenda: mover de etapa está detrás de
+           `citas.editar`. A quien atiende se le mostraban los botones igual y
+           tocarlos devolvía "No tienes permiso para esta acción" en rojo,
+           encima de la pantalla con la que está cobrando. Ella cobra con el
+           botón de abajo, que sí es suyo. -->
+      <div v-if="auth.can('citas.editar')" class="border-b border-slate-100 pb-4">
         <StagePicker :appointment-id="appointment.id" />
       </div>
 

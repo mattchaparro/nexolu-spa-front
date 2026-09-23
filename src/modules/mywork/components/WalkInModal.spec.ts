@@ -28,6 +28,9 @@ vi.mock('@/modules/agenda/composables/useAvailability', () => ({
 
 vi.mock('@/modules/agenda/composables/useAppointments', () => ({
   searchClients: async () => [],
+  // Identificar por teléfono: quien atiende no puede buscar por nombre
+  // (`clientes.ver`), así que el modal la busca por su número completo.
+  useClientLookup: () => ({ mutateAsync: async () => ({ found: false }) }),
 }))
 
 vi.mock('@/composables/usePaymentMethods', () => ({

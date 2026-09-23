@@ -7,7 +7,12 @@ import { usePaymentMethods } from '@/composables/usePaymentMethods'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 
-import { searchClients, type ClientOption } from '@/modules/agenda/composables/useAppointments'
+import {
+  searchClients,
+  useClientLookup,
+  type ClientOption,
+} from '@/modules/agenda/composables/useAppointments'
+import { useAuthStore } from '@/stores/auth.store'
 import { useServices } from '@/modules/agenda/composables/useAvailability'
 import { useMoney } from '@/modules/cash/composables/useMoney'
 import { toLocalDateIso } from '@/utils/toLocalDateIso'
@@ -45,6 +50,19 @@ const { data: resources } = useQuery({
 })
 
 const { data: methods } = usePaymentMethods()
+
+const auth = useAuthStore()
+const { mutateAsync: buscarPorTelefono } = useClientLookup()
+
+/*
+ * Buscar por NOMBRE es abrir la base, y quien atiende no tiene ese permiso
+ * (`clientes.ver`): la API le responde 403. Antes se le pedía igual, el
+ * desplegable quedaba vacío sin decir por qué, y le creaba ficha nueva a una
+ * clienta que ya existía -- con su historial y sus sellos en la ficha vieja.
+ *
+ * Ella identifica como en el cobro: por TELÉFONO COMPLETO, de a una.
+ */
+const puedeBuscarPorNombre = computed(() => auth.can('clientes.ver'))
 
 const staff = computed(() => resources.value?.filter((r) => r.type === 'staff') ?? [])
 
@@ -87,13 +105,69 @@ const service = computed(() => services.value?.find((s) => s.id === serviceId.va
 /** Quien no atiende tiene que decir quién lo hizo. */
 const mustPickResource = computed(() => props.myResourceId === null)
 
+/** El nombre que devolvió identificar por teléfono, si lo hubo. */
+const identificada = ref<string | null>(null)
+
 let timer: ReturnType<typeof setTimeout> | undefined
 watch(term, (value) => {
+  /*
+   * Identificar por teléfono ESCRIBE el nombre, y eso dispara este watcher.
+   * Sin esta guarda se borraba la selección que acababa de hacerse: la
+   * pantalla decía "es Gisel M." y la visita se guardaba en una ficha NUEVA
+   * -- duplicada, sin su historial ni sus sellos. Se vio probándolo.
+   */
+  if (identificada.value !== null && value === identificada.value) {
+    return
+  }
+
   selected.value = null
+
+  if (!puedeBuscarPorNombre.value) {
+    return
+  }
+
   clearTimeout(timer)
   timer = setTimeout(async () => {
     results.value = await searchClients(value)
   }, 250)
+})
+
+/*
+ * El teléfono completo sí identifica: se pregunta de a una y la respuesta es
+ * un nombre de pila con la inicial. Así la visita cae en la ficha que ya
+ * existe en vez de crear una repetida.
+ */
+let timerTelefono: ReturnType<typeof setTimeout> | undefined
+
+watch(phone, (value) => {
+  identificada.value = null
+  clearTimeout(timerTelefono)
+
+  if (puedeBuscarPorNombre.value || value.replace(/\D/g, '').length < 7) {
+    return
+  }
+
+  timerTelefono = setTimeout(async () => {
+    try {
+      const r = await buscarPorTelefono(value)
+
+      if (r.found && r.client) {
+        // `display_name` es lo único que devuelve identificar: un nombre de
+        // pila con la inicial. No trae teléfono ni correo, a propósito.
+        identificada.value = r.client.display_name
+        selected.value = {
+          id: r.client.id,
+          full_name: r.client.display_name,
+          phone: value,
+          label: r.client.display_name,
+        }
+        term.value = r.client.display_name
+      }
+    } catch {
+      // Sin permiso o sin red: se sigue con el nombre escrito, que es lo
+      // que hacía antes. No se le pone un error encima de un campo opcional.
+    }
+  }, 400)
 })
 
 watch(
@@ -233,8 +307,14 @@ async function submit(): Promise<void> {
           </li>
         </ul>
 
-        <p v-if="selected" class="mt-1 text-xs text-emerald-700">
+        <p v-if="identificada" class="mt-1 text-xs text-emerald-700">
+          Es {{ identificada }}: la visita queda en su ficha.
+        </p>
+        <p v-else-if="selected" class="mt-1 text-xs text-emerald-700">
           Cliente existente · {{ selected.phone ?? 'sin teléfono' }}
+        </p>
+        <p v-else-if="!puedeBuscarPorNombre && term.trim().length > 1" class="mt-1 text-xs text-slate-500">
+          Escribe su teléfono completo abajo y la buscamos; si no está, se guarda como nueva.
         </p>
         <p v-else-if="term.trim().length > 1" class="mt-1 text-xs text-slate-500">
           Se guardará como cliente nuevo.

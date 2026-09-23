@@ -92,14 +92,24 @@ function onCancelada(): void {
   notify('Cita cancelada.', 'success')
 }
 
+/*
+ * Las fechas se leen a MEDIODÍA, no a medianoche.
+ *
+ * Un `2026-08-01` que el navegador interpreta como medianoche UTC se muestra
+ * como 31 de julio en Colombia. Con las 12:00 no hay huso que lo corra de día.
+ */
+function diaLegible(iso: string | null, conMes = true): string {
+  if (!iso) return '—'
+
+  return new Date(`${iso}T12:00`).toLocaleDateString('es-CO', {
+    day: 'numeric',
+    ...(conMes ? { month: 'long' } : {}),
+  })
+}
+
 /** "1 de agosto al 31 de agosto", que es como ella piensa el período. */
 function periodo(pago: MyPayment): string {
-  const dia = (iso: string | null) =>
-    iso
-      ? new Date(`${iso}T12:00`).toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })
-      : '—'
-
-  return `${dia(pago.period_start)} al ${dia(pago.period_end)}`
+  return `${diaLegible(pago.period_start)} al ${diaLegible(pago.period_end)}`
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -262,7 +272,7 @@ const STATUS_LABELS: Record<string, string> = {
               <div>
                 <p class="font-medium text-slate-800">{{ periodo(pago) }}</p>
                 <p class="text-xs text-slate-500">
-                  Pagado el {{ pago.paid_at }} · {{ pago.services_count }} servicio(s)
+                  Pagado el {{ diaLegible(pago.paid_at) }} · {{ pago.services_count }} servicio(s)
                 </p>
               </div>
               <span class="text-lg font-semibold tabular-nums text-slate-800">

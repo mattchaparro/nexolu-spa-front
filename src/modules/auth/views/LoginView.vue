@@ -51,7 +51,13 @@ async function submit(): Promise<void> {
       // celular no deberia cerrarla en la tablet del mostrador.
       device_name: navigator.userAgent.slice(0, 100),
     })
-    await router.push({ name: 'agenda' })
+    /*
+     * A la raíz, que decide a dónde según el rol (ver el router): quien
+     * atiende entra a SU día y quien coordina, a la agenda del negocio.
+     * Mandar a todo el mundo a `agenda` dejaba a una manicurista mirando
+     * las citas de todas para buscar las suyas.
+     */
+    await router.push('/')
   } catch (e) {
     error.value = extractErrorMessage(e, 'No pudimos iniciar sesión. Revisa tus datos.')
   } finally {

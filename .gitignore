@@ -13,6 +13,7 @@ dist
 dist-ssr
 *.local
 .env
+.env.local
 
 # Config local del harness de Claude Code (dev server), no compartido en el repo
 .claude/
