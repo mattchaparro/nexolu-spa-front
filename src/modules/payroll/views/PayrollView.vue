@@ -230,8 +230,8 @@ const previewMessage = computed(() =>
               v-if="preview.net_total < 0"
               class="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-800"
             >
-              Debe más de lo que produjo en este período. Si liquidas ahora queda en cero y no sale
-              plata; el saldo no se arrastra solo.
+              Debe más de lo que produjo en este período. Si liquidas ahora no sale plata, y lo
+              que queda debiendo pasa como descuento a la próxima liquidación.
             </p>
 
             <NxButton class="mt-4" :disabled="settling" @click="openConfirm">
