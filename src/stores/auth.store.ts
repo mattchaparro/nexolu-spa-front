@@ -65,6 +65,27 @@ export const useAuthStore = defineStore('auth', () => {
     setSession(data)
   }
 
+  /**
+   * Canjea el pase con el que el sistema viejo entrega a alguien ya
+   * identificado.
+   *
+   * Es el mismo trato que `exchangeAssertion`, con otra credencial: allá la
+   * firma de nexolu-auth, acá un pase de un solo uso que dura un minuto. El
+   * 401 no es raro -- el pase vence rápido a propósito -- y quien llama debe
+   * mandar a la persona a escribir su clave, no reintentar.
+   */
+  async function redeemLegacyTicket(ticket: string): Promise<void> {
+    const { data } = await httpClient.post<AuthResponse>(
+      '/auth/legacy/canjear',
+      { ticket, device_name: navigator.userAgent.slice(0, 100) },
+      // Igual que el canje de SSO: corre dentro del guard del router, y el
+      // interceptor no puede navegar por su cuenta sin abortar la
+      // navegacion en curso.
+      { skipAuthRedirect: true },
+    )
+    setSession(data)
+  }
+
   async function logout(): Promise<void> {
     try {
       await httpClient.post('/logout')
@@ -138,6 +159,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   return {
+    redeemLegacyTicket,
     user,
     token,
     business,

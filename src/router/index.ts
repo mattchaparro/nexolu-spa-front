@@ -23,6 +23,18 @@ export const routes: RouteRecordRaw[] = [
     meta: { public: true, layout: 'auth' },
   },
 
+  /*
+   * La entrada desde el sistema viejo de Luxury, mientras dure la
+   * convivencia. El pase viene en la URL, se canjea y se gasta; la vista no
+   * tiene formulario porque quien llega aqui ya se identifico alla.
+   */
+  {
+    path: '/entrar/:ticket',
+    name: 'legacy-handoff',
+    component: () => import('@/modules/auth/views/EntrarDesdeLegacyView.vue'),
+    meta: { public: true, layout: 'auth' },
+  },
+
   // Reserva publica: sin sesion, por slug del negocio. Alcance minimo a
   // proposito -- consultar y reservar, nada mas.
   {
