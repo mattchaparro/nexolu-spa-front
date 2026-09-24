@@ -161,30 +161,18 @@ export const routes: RouteRecordRaw[] = [
   },
   {
     /*
-     * La bandeja de WhatsApp. Con `clientes.ver`: muestra el teléfono y el
-     * nombre de todas las clientas que han escrito, no solo las que uno
-     * atiende.
+     * WhatsApp. El chat vive en Nexolú Connect: esta pantalla solo abre
+     * Connect con la persona ya adentro (ver ConnectChatView). Con
+     * `clientes.ver`: el chat muestra el teléfono y el nombre de todas las
+     * clientas que han escrito, no solo las que uno atiende.
      */
     path: '/whatsapp',
     name: 'inbox',
-    component: () => import('@/modules/messages/views/InboxView.vue'),
+    component: () => import('@/modules/messages/views/ConnectChatView.vue'),
     meta: { permission: 'clientes.ver' },
   },
-  {
-    /*
-     * La misma bandeja, pero la de Connect, mostrada acá adentro.
-     *
-     * Existe al lado de `/whatsapp` y no en su lugar mientras se prueba
-     * con gente de verdad: la de acá funciona y no se apaga hasta que la
-     * otra esté probada en el mostrador. Cuando lo esté, esta ruta toma
-     * `/whatsapp` y `InboxView.vue` se borra -- ese es el punto, tener
-     * una sola.
-     */
-    path: '/whatsapp/chat',
-    name: 'chat-connect',
-    component: () => import('@/modules/messages/views/ChatConnectView.vue'),
-    meta: { permission: 'clientes.ver' },
-  },
+  // Donde estuvo la bandeja embebida: por si alguien la guardó.
+  { path: '/whatsapp/chat', redirect: { name: 'inbox' } },
   {
     /*
      * La bandeja de salida.
