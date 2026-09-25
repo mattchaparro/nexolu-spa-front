@@ -24,6 +24,14 @@ import {
 } from '../composables/useAppointments'
 
 const props = defineProps<{ appointment: Appointment | null }>()
+
+/** Por dónde entró la cita. */
+const CANALES: Record<string, string> = {
+  online: 'Agendó en la web',
+  whatsapp_agent: 'Agendó por WhatsApp',
+  admin: 'Agendada en el panel',
+  phone: 'Agendada por teléfono',
+}
 const emit = defineEmits<{ close: []; done: []; cancelled: []; deleted: [] }>()
 
 const { mutateAsync: cancelMutation } = useCancelAppointment()
@@ -310,7 +318,17 @@ async function submit(): Promise<void> {
   <NxModal :model-value="open" title="Cobrar servicio" @update:model-value="emit('close')">
     <div v-if="appointment" class="flex flex-col gap-4">
       <div class="rounded-md bg-slate-50 px-4 py-3 text-sm">
-        <p class="font-medium text-slate-800">{{ appointment.client_name }}</p>
+        <p class="flex flex-wrap items-center justify-between gap-2">
+          <span class="font-medium text-slate-800">{{ appointment.client_name }}</span>
+          <!-- Por dónde entró: página, WhatsApp o panel. Alejandro quiere
+               saber de dónde le llegan las citas, no solo cuántas. -->
+          <span
+            v-if="CANALES[appointment.source]"
+            class="rounded-full bg-white px-2 py-0.5 text-xs text-slate-500 ring-1 ring-slate-200"
+          >
+            {{ CANALES[appointment.source] }}
+          </span>
+        </p>
         <p
           v-for="item in appointment.items"
           :key="item.id"
