@@ -308,6 +308,10 @@ export interface BreakPayload {
   start_time: string
   end_time: string
   label?: string
+  /** Desde qué día rige. Sin él, desde hoy. */
+  effective_from?: string | null
+  /** Hasta qué día rige (incluido). Sin él, para siempre. */
+  effective_to?: string | null
 }
 
 export function useBreaks(resourceId: Ref<number | null>) {
