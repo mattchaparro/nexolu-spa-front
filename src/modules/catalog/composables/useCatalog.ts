@@ -23,6 +23,8 @@ export interface AdminService {
   retouch_days: number | null
   price: number
   is_bookable_online: boolean
+  /** Si suma sello en la tarjeta. Un retiro no: es el paso previo. */
+  earns_stamps: boolean
   is_active: boolean
   resource_ids?: number[]
   /** La familia a la que pertenece. `null` = sin categoría. */

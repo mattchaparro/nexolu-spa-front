@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
+import { useAuthStore } from '@/stores/auth.store'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxInput, NxModal, NxSwitch } from '@/ui'
 
@@ -14,6 +15,7 @@ import {
 const props = defineProps<{ service: AdminService | null; open: boolean }>()
 const emit = defineEmits<{ close: []; saved: [] }>()
 
+const auth = useAuthStore()
 const { data: team } = useTeam()
 const { mutateAsync, isPending } = useSaveService()
 
@@ -27,6 +29,8 @@ const retouchDays = ref('')
 const price = ref('0')
 const commission = ref('30')
 const bookableOnline = ref(true)
+/** Un retiro no suma sello: es el paso previo al servicio de verdad. */
+const earnsStamps = ref(true)
 const image = ref<File | null>(null)
 const preview = ref<string | null>(null)
 const error = ref<string | null>(null)
@@ -53,6 +57,7 @@ watch(
     price.value = String(s?.price ?? 0)
     commission.value = '30'
     bookableOnline.value = s?.is_bookable_online ?? true
+    earnsStamps.value = s?.earns_stamps ?? true
     image.value = null
     preview.value = s?.image_url ?? null
     error.value = null
@@ -118,6 +123,7 @@ async function submit(): Promise<void> {
         price: Number(price.value),
         commission_rate: Number(commission.value) / 100,
         is_bookable_online: bookableOnline.value,
+        earns_stamps: earnsStamps.value,
         resources,
       },
       image: image.value,
@@ -173,6 +179,13 @@ async function submit(): Promise<void> {
           <NxSwitch v-model="bookableOnline" :disabled="isPending" />
           <span class="ml-2 text-sm text-slate-600">Reservable en línea</span>
         </div>
+      </div>
+
+      <!-- Un retiro no es la visita que el salón premia: apagado, no suma
+           sello en la tarjeta. -->
+      <div v-if="auth.hasFeature('loyalty')" class="flex items-center">
+        <NxSwitch v-model="earnsStamps" :disabled="isPending" />
+        <span class="ml-2 text-sm text-slate-600">Suma sello en la tarjeta</span>
       </div>
 
       <!-- Cada cuánto se retoca: de acá sale el mensaje que trae de vuelta a
