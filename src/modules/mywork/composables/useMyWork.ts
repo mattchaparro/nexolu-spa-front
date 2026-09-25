@@ -37,9 +37,20 @@ export interface MyPayment {
 export interface MyWork {
   resource: { id: number; name: string } | null
   message?: string
+  /**
+   * Lo que lleva desde el último pago: la misma cuenta de la liquidación.
+   * Null si ya se le liquidó más allá de hoy.
+   */
+  to_date: {
+    since: string
+    services: number
+    charged: number
+    commission: number
+    bonus: number
+    deduction: number
+    net: number
+  } | null
   today: Earned
-  week: Earned
-  month: Earned
   pending_checkout: Array<{
     id: number
     client_name: string | null

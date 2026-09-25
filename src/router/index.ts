@@ -86,15 +86,24 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/',
     /*
-     * Quien atiende entra a SU día; quien coordina, a la agenda del negocio.
+     * Quien atiende entra a SU día; quien solo coordina, a la agenda.
      *
-     * Lo decide `citas.ver_todas`, que es justo la diferencia: recepción y
-     * administración ven la agenda entera, una manicurista ve la suya. Antes
-     * todo el mundo caía en la agenda del negocio -- para ella, una pantalla
-     * con las citas de todas, donde lo suyo hay que buscarlo.
+     * Lo decide si la persona atiende --si su usuario está en la agenda como
+     * alguien del equipo--, no su rol. Alejandra es admin y también es
+     * manicurista: con `citas.ver_todas` caía en la agenda del negocio, y lo
+     * que ella viene a mirar al entrar es cuánto lleva y qué le toca hoy.
      */
-    redirect: () => {
+    //
+    // En `beforeEnter` y no en `redirect`: un `redirect` se resuelve ANTES
+    // del guard global, así que en una carga directa (F5 en la raíz) el
+    // usuario todavía no estaba en memoria, can() daba falso para todo y
+    // hasta el admin caía en «Mi día». `beforeEnter` corre después del guard,
+    // con la persona ya cargada.
+    component: { render: () => null },
+    beforeEnter: () => {
       const auth = useAuthStore()
+
+      if (auth.user?.resource_id) return { name: 'my-work' }
 
       return { name: auth.can('citas.ver_todas') ? 'agenda' : 'my-work' }
     },
@@ -354,7 +363,8 @@ router.beforeEach(async (to) => {
       }
       // Sin ruta pretendida, la del guard de mas abajo: plataforma a lo
       // suyo, negocio a la agenda.
-      return auth.isSuperAdmin ? { name: 'sa-dashboard' } : { name: 'agenda' }
+      // La raíz decide: quien atiende a su día, quien coordina a la agenda.
+      return auth.isSuperAdmin ? { name: 'sa-dashboard' } : '/'
     } catch (error) {
       // NO se rebota a nexolu-auth: alla la cookie sigue viva, emitiria otra
       // asercion, volveria a fallar igual, y el usuario quedaria en un bucle

@@ -266,6 +266,7 @@ async function submit(): Promise<void> {
         option-label="name"
         option-value="id"
         label="Servicio"
+        filter
         :disabled="isPending"
       />
 

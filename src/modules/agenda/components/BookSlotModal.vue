@@ -63,6 +63,27 @@ const mode = ref<Mode>('one')
 
 const serviceId = ref<number | null>(null)
 const chainIds = ref<number[]>([])
+
+/*
+ * Buscar en la lista de «Varios»: son más de cuarenta servicios y bajar por
+ * todos para encontrar uno era lo más lento de agendar. Sin tildes ni
+ * mayúsculas: «extension» encuentra «Extensión».
+ */
+const chainSearch = ref('')
+const plano = (t: string): string =>
+  t
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+const chainOptions = computed(() => {
+  const q = plano(chainSearch.value.trim())
+  const lista = props.services
+
+  // Los ya marcados siempre a la vista, aunque no coincidan: son la visita.
+  return q === ''
+    ? lista
+    : lista.filter((s) => chainIds.value.includes(s.id) || plano(s.name).includes(q))
+})
 const packageId = ref<number | null>(null)
 const date = ref('')
 
@@ -186,6 +207,7 @@ watch(open, (isOpen) => {
   serviceId.value = preferred?.id ?? available.value[0]?.id ?? null
 
   chainIds.value = []
+  chainSearch.value = ''
   packageId.value = null
   date.value = props.pick?.date ?? ''
   // Si vino de tocar la columna de alguien, esa es la persona que se quiere.
@@ -385,6 +407,7 @@ async function submit(): Promise<void> {
             option-label="name"
             option-value="id"
             label="Servicio"
+            filter
             :disabled="isPending"
           />
         </template>
@@ -396,11 +419,19 @@ async function submit(): Promise<void> {
             <span class="text-xs text-slate-400">· en el orden que los marques</span>
           </p>
 
+          <input
+            v-model="chainSearch"
+            type="search"
+            placeholder="Buscar servicio…"
+            class="mb-1.5 w-full rounded-md border border-slate-200 px-3 py-1.5 text-sm"
+            :disabled="isPending"
+          />
+
           <div
             class="max-h-40 divide-y divide-slate-50 overflow-y-auto rounded-md border border-slate-200"
           >
             <label
-              v-for="item in services"
+              v-for="item in chainOptions"
               :key="item.id"
               class="flex items-center gap-2.5 px-3 py-2 text-sm"
             >

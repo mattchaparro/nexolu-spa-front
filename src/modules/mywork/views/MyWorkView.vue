@@ -149,6 +149,49 @@ const STATUS_LABELS: Record<string, string> = {
     </p>
 
     <template v-else>
+      <!--
+        Lo primero: cuánto lleva ganado hasta hoy, desde el último pago.
+        Es la pregunta de toda manicurista, y la semana o el mes no la
+        contestan -- el pago no corta por semanas, corta cuando se liquida.
+        Es la MISMA cifra que ve quien paga. Debajo, lo de hoy.
+      -->
+      <div class="mb-6 grid gap-3 sm:grid-cols-2">
+        <article
+          v-if="data.to_date"
+          class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 sm:col-span-2"
+        >
+          <p class="text-xs uppercase tracking-wide text-emerald-700">
+            Llevas de comisión
+            <span class="normal-case tracking-normal text-emerald-600">
+              · desde el {{ diaLegible(data.to_date.since) }}
+            </span>
+          </p>
+          <p class="mt-1 text-3xl font-semibold tabular-nums text-emerald-900">
+            {{ money(data.to_date.commission) }}
+          </p>
+          <p class="text-xs text-emerald-800">
+            {{ data.to_date.services }} servicio(s) · {{ money(data.to_date.charged) }} vendido
+          </p>
+          <p
+            v-if="data.to_date.bonus > 0 || data.to_date.deduction > 0"
+            class="mt-1 text-xs text-emerald-800"
+          >
+            Con bonos y descuentos, te quedan {{ money(data.to_date.net) }}.
+          </p>
+        </article>
+
+        <article class="rounded-lg border border-slate-200 bg-white p-4 sm:col-span-2">
+          <p class="text-xs uppercase tracking-wide text-slate-400">Hoy</p>
+          <p class="mt-1 text-2xl font-semibold tabular-nums text-slate-800">
+            {{ money(data.today.commission) }}
+            <span class="text-sm font-normal text-slate-500">de comisión</span>
+          </p>
+          <p class="text-xs text-slate-500">
+            {{ data.today.services }} servicio(s) · {{ money(data.today.charged) }} vendido
+          </p>
+        </article>
+      </div>
+
       <!-- Lo que atendió pero no cobró: es lo primero que tiene que resolver
            antes de irse, no un dato más. -->
       <div
@@ -181,28 +224,6 @@ const STATUS_LABELS: Record<string, string> = {
             </NxButton>
           </div>
         </div>
-      </div>
-
-      <!-- Lo que gana ella, no la facturación del negocio: es lo que una
-           del equipo viene a mirar. -->
-      <div class="mb-6 grid gap-3 sm:grid-cols-3">
-        <article
-          v-for="period in [
-            { key: 'today', label: 'Hoy', data: data.today },
-            { key: 'week', label: 'Esta semana', data: data.week },
-            { key: 'month', label: 'Este mes', data: data.month },
-          ]"
-          :key="period.key"
-          class="rounded-lg border border-slate-200 bg-white p-4"
-        >
-          <p class="text-xs uppercase tracking-wide text-slate-400">{{ period.label }}</p>
-          <p class="mt-1 text-2xl font-semibold tabular-nums text-slate-800">
-            {{ money(period.data.commission) }}
-          </p>
-          <p class="text-xs text-slate-500">
-            {{ period.data.services }} servicio(s) · {{ money(period.data.charged) }} cobrado
-          </p>
-        </article>
       </div>
 
       <!-- Debajo de lo que gana y encima de la agenda del día: se ve al
