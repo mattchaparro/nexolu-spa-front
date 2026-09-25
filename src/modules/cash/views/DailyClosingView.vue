@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import { useSystemAlert } from '@/composables/useSystemAlert'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
@@ -33,6 +33,33 @@ const { data: preview, isLoading } = useClosingPreview(date, locationId)
 const { data: closings } = useClosings(locationId)
 const { mutateAsync: closeDay, isPending: closingDay } = useCloseDay()
 const { mutateAsync: undo } = useUndoClosing()
+
+/*
+ * Al entrar se abre el día que falta cerrar, no hoy.
+ *
+ * Se cierra de noche o a la mañana siguiente: pasada la medianoche «hoy» ya
+ * es el día nuevo, vacío, y había que ir a buscar el de ayer en el
+ * calendario. Solo la primera vez: si después elige otro día, se respeta.
+ */
+let yaSugerido = false
+watch(preview, (p) => {
+  if (yaSugerido || !p) return
+  yaSugerido = true
+
+  const pendientes = p.pending_dates
+  if (date.value === toLocalDateIso() && pendientes.length && !p.appointments) {
+    date.value = pendientes[pendientes.length - 1]
+  }
+})
+
+/** «jueves 24 de septiembre», que es como se dice en el mostrador. */
+function diaLegible(iso: string): string {
+  return new Date(`${iso}T12:00`).toLocaleDateString('es-CO', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })
+}
 
 const difference = computed(() => {
   if (!preview.value || actualCash.value === '') {
@@ -97,23 +124,23 @@ async function undoClosing(id: number, day: string): Promise<void> {
       </div>
     </header>
 
-    <!-- Días con movimiento que quedaron sin cerrar. Solo aparecen los que
-         tuvieron citas: una lista con los días que el spa no abrió no la
-         mira nadie. -->
+    <!-- Días con movimiento que quedaron sin cerrar DESPUÉS del último
+         cierre (lo de antes ya no se persigue). Sin ningún cierre, solo el
+         último día trabajado: es el que arranca la cadena. -->
     <div
-      v-if="preview?.pending_dates.length"
+      v-if="preview?.pending_dates.filter((d) => d !== date).length"
       class="mb-6 rounded-md border-l-4 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900"
     >
-      <p class="font-medium">Días sin cerrar</p>
+      <p class="font-medium">Falta cerrar</p>
       <p class="mt-1">
         <button
-          v-for="day in preview.pending_dates"
+          v-for="day in preview.pending_dates.filter((d) => d !== date)"
           :key="day"
           type="button"
-          class="mr-2 underline"
+          class="mr-3 underline"
           @click="date = day"
         >
-          {{ day }}
+          {{ diaLegible(day) }}
         </button>
       </p>
     </div>
