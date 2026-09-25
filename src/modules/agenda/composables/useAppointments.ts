@@ -78,6 +78,8 @@ export interface BookPayload {
   notes?: string
   /** Agendar sin avisarle a la clienta ni al equipo (solo el admin). */
   silent?: boolean
+  /** Una hora puntual aunque no esté en el turno (quien gestiona horarios). */
+  outside_schedule?: boolean
 }
 
 export function useAppointments(date: Ref<string>) {

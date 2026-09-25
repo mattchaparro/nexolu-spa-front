@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
+import { useAuthStore } from '@/stores/auth.store'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxDatePicker, NxInput, NxModal, NxSelect } from '@/ui'
 
@@ -108,6 +109,18 @@ const notes = ref('')
 /** Agendar sin confirmación a la clienta ni aviso a quien atiende. */
 const silent = ref(false)
 
+const auth = useAuthStore()
+
+/*
+ * Una hora puntual, fuera de la lista y hasta fuera del turno.
+ *
+ * «Aleja sale a las 5, pero a esta clienta la atiende a las 4»: la lista
+ * solo trae lo que cabe en la jornada, y el mostrador necesita poder
+ * decidir. Solo para quien gestiona horarios; la persona hay que elegirla.
+ */
+const horaPuntual = ref(false)
+const horaManual = ref('')
+
 /*
 |------------------------------------------------------------------------------
 | Garantía
@@ -155,7 +168,16 @@ const available = computed(() =>
     : props.services,
 )
 
-const slots = computed(() => availability.value?.slots ?? [])
+/*
+ * Las horas de quien se eligió en «Con quién», o de todas. Antes salían
+ * mezcladas y había que leer el nombre al lado de cada hora para encontrar
+ * las de Alejandra.
+ */
+const slots = computed(() =>
+  (availability.value?.slots ?? []).filter(
+    (s) => isChain.value || preferredId.value === null || s.resource_id === preferredId.value,
+  ),
+)
 const chainSlots = computed(() => chain.value?.slots ?? [])
 
 const { data: resourcesData } = useResources(locationId)
@@ -222,6 +244,8 @@ watch(open, (isOpen) => {
   phone.value = ''
   notes.value = ''
   silent.value = false
+  horaPuntual.value = false
+  horaManual.value = ''
   esGarantia.value = false
   garantiaDe.value = null
   garantiaNota.value = ''
@@ -266,7 +290,23 @@ function choose(client: ClientOption): void {
 /** Con quién queda, para poder decirlo antes de confirmar. */
 const chosenResourceName = computed(() => {
   if (props.pick?.resourceName) return props.pick.resourceName
-  return slots.value.find((s) => s.resource_id === chosenResourceId.value)?.resource_name ?? null
+  return (
+    slots.value.find((s) => s.resource_id === chosenResourceId.value)?.resource_name ??
+    staff.value.find((r) => r.id === chosenResourceId.value)?.name ??
+    null
+  )
+})
+
+/** Para un servicio solo: las que lo prestan. */
+const staffDelServicio = computed(() =>
+  staff.value.filter((r) => !service.value?.resource_ids || service.value.resource_ids.includes(r.id)),
+)
+
+/** La hora puntual queda con la persona elegida, a la hora escrita. */
+watch([horaPuntual, horaManual, preferredId], () => {
+  if (!horaPuntual.value) return
+  chosenTime.value = horaManual.value || null
+  chosenResourceId.value = preferredId.value
 })
 
 const isChain = computed(() => mode.value !== 'one' && picking.value)
@@ -296,6 +336,7 @@ async function submit(): Promise<void> {
     warranty_for_resource_id: esGarantia.value ? garantiaDe.value : undefined,
     warranty_note: esGarantia.value ? garantiaNota.value.trim() || undefined : undefined,
     silent: silent.value || undefined,
+    outside_schedule: (!isChain.value && horaPuntual.value) || undefined,
   }
 
   try {
@@ -492,10 +533,9 @@ async function submit(): Promise<void> {
           </div>
         </div>
 
-        <!-- Con quién.
-             Sólo en visitas de varios servicios: con uno solo, la persona sale
-             en cada hora de la lista y elegirla dos veces sobra. -->
-        <div v-if="picking && isChain && staff.length > 1">
+        <!-- Con quién. En varios servicios es una preferencia; con uno solo
+             filtra la lista a las horas de esa persona. -->
+        <div v-if="picking && (isChain ? staff : staffDelServicio).length > 1">
           <p class="mb-1.5 text-sm text-slate-600">
             Con quién
             <span class="text-xs text-slate-400">· se respeta en lo que pueda hacer</span>
@@ -517,7 +557,7 @@ async function submit(): Promise<void> {
             </button>
 
             <button
-              v-for="person in staff"
+              v-for="person in isChain ? staff : staffDelServicio"
               :key="person.id"
               type="button"
               class="rounded-md border px-2.5 py-1.5 text-sm transition"
@@ -609,7 +649,7 @@ async function submit(): Promise<void> {
                 No quedan horas ese día para este servicio. Prueba con otro día.
               </p>
 
-              <div v-else class="flex max-h-40 flex-wrap gap-2 overflow-y-auto">
+              <div v-else-if="!horaPuntual" class="flex max-h-40 flex-wrap gap-2 overflow-y-auto">
                 <button
                   v-for="(slot, i) in slots"
                   :key="i"
@@ -626,8 +666,47 @@ async function submit(): Promise<void> {
                   @click="pickSlot(slot)"
                 >
                   {{ slot.label }}
-                  <span class="ml-1 text-xs text-slate-400">{{ slot.resource_name }}</span>
+                  <span v-if="preferredId === null" class="ml-1 text-xs text-slate-400">
+                    {{ slot.resource_name }}
+                  </span>
                 </button>
+              </div>
+
+              <!-- Una hora puntual, aunque no esté en la lista ni en el turno. -->
+              <div v-if="auth.can('horarios.gestionar')" class="mt-2">
+                <button
+                  v-if="!horaPuntual"
+                  type="button"
+                  class="text-sm text-indigo-600 underline-offset-2 hover:underline"
+                  @click="horaPuntual = true"
+                >
+                  Poner otra hora
+                </button>
+                <div v-else class="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+                  <div class="flex items-center gap-2 text-sm">
+                    <span class="text-slate-700">Hora</span>
+                    <input
+                      v-model="horaManual"
+                      type="time"
+                      class="rounded border border-slate-200 px-2 py-1 tabular-nums"
+                      :disabled="isPending"
+                    />
+                    <button
+                      type="button"
+                      class="ml-auto text-xs text-slate-500 hover:underline"
+                      @click="horaPuntual = false"
+                    >
+                      Volver a la lista
+                    </button>
+                  </div>
+                  <p class="text-xs text-amber-800">
+                    {{
+                      preferredId === null
+                        ? 'Elige arriba con quién.'
+                        : 'Se agenda aunque esté fuera de su turno.'
+                    }}
+                  </p>
+                </div>
               </div>
             </template>
           </div>
