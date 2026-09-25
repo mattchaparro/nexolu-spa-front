@@ -10,7 +10,12 @@ import { toLocalDateIso } from '@/utils/toLocalDateIso'
 import BookSlotModal, { type SlotPick } from '../components/BookSlotModal.vue'
 import CalendarGrid from '../components/CalendarGrid.vue'
 import CheckoutModal from '../components/CheckoutModal.vue'
-import { useAgenda, useReschedule, type GridAppointment } from '../composables/useAgenda'
+import {
+  colorDePersona,
+  useAgenda,
+  useReschedule,
+  type GridAppointment,
+} from '../composables/useAgenda'
 import { useAppointments, type Appointment } from '../composables/useAppointments'
 import { useServices } from '../composables/useAvailability'
 
@@ -125,6 +130,30 @@ const staff = computed(() => agenda.value?.days[0]?.resources ?? [])
 */
 const enTelefono = ref(false)
 
+/*
+ * General o por persona. Alejandro mira la agenda del salón entera, no una
+ * columna por manicurista: la general es la de siempre, con cada cita del
+ * color de quien atiende. «Por persona» sigue a un toque. Se recuerda en
+ * este navegador.
+ */
+function leerModo(): 'general' | 'persona' {
+  try {
+    return localStorage.getItem('agenda.modo') === 'persona' ? 'persona' : 'general'
+  } catch {
+    return 'general'
+  }
+}
+
+const modo = ref<'general' | 'persona'>(leerModo())
+
+watch(modo, (valor) => {
+  try {
+    localStorage.setItem('agenda.modo', valor)
+  } catch {
+    // Navegación privada: se recuerda solo mientras la página esté abierta.
+  }
+})
+
 /** `null` = todas. */
 const filtroPersona = ref<number | null>(null)
 
@@ -171,8 +200,8 @@ const columnaUnida = computed(() => {
        */
       windows: gente.flatMap((r) => r.windows),
       breaks: [],
-      appointments: gente.flatMap((r) =>
-        r.appointments.map((a) => ({ ...a, who: r.name })),
+      appointments: gente.flatMap((r, i) =>
+        r.appointments.map((a) => ({ ...a, who: r.name, color: colorDePersona(r.color, i) })),
       ),
     },
   }
@@ -197,17 +226,20 @@ const columns = computed(() => {
       (r) => filtroPersona.value === null || r.id === filtroPersona.value,
     )
 
-    // Unida solo en el teléfono y sin filtro: con una persona elegida, su
-    // columna normal, que sí deja agendar tocando un hueco.
-    if (enTelefono.value && filtroPersona.value === null && columnaUnida.value) {
+    // Unida en la vista general (y siempre en el teléfono) mientras no haya
+    // filtro: con una persona elegida, su columna normal, que sí deja
+    // agendar tocando un hueco.
+    if ((enTelefono.value || modo.value === 'general') && filtroPersona.value === null && columnaUnida.value) {
       return [columnaUnida.value]
     }
+
+    const todas = day?.resources ?? []
 
     return personas.map((resource) => ({
       key: resource.id,
       label: resource.name,
       sublabel: `${resource.appointments.length}`,
-      color: resource.color,
+      color: colorDePersona(resource.color, todas.findIndex((r) => r.id === resource.id)),
       resource,
       date: day.date,
     }))
@@ -393,6 +425,24 @@ function onOpen(appointment: GridAppointment): void {
           <option v-for="sede in sedes" :key="sede.id" :value="sede.id">{{ sede.name }}</option>
         </select>
 
+        <!-- General (todas juntas, cada una de su color) o una columna por
+             persona. Solo en escritorio: en el teléfono siempre es general. -->
+        <div
+          v-if="!enTelefono && view === 'day' && staff.length > 1"
+          class="flex overflow-hidden rounded-md border border-slate-200"
+        >
+          <button
+            v-for="option in ['general', 'persona'] as const"
+            :key="option"
+            type="button"
+            class="px-3 py-1.5 text-sm"
+            :class="modo === option ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600'"
+            @click="modo = option"
+          >
+            {{ option === 'general' ? 'General' : 'Por persona' }}
+          </button>
+        </div>
+
         <div class="flex overflow-hidden rounded-md border border-slate-200">
           <button
             v-for="option in ['day', 'week'] as View[]"
@@ -425,8 +475,8 @@ function onOpen(appointment: GridAppointment): void {
       Sólo con más de una persona: filtrar entre una es ruido.
     -->
     <div
-      v-if="enTelefono && view === 'day' && staff.length > 1"
-      class="mb-3 flex flex-wrap gap-2 md:hidden"
+      v-if="(enTelefono || modo === 'general') && view === 'day' && staff.length > 1"
+      class="mb-3 flex flex-wrap gap-2"
     >
       <button
         type="button"
@@ -442,10 +492,10 @@ function onOpen(appointment: GridAppointment): void {
       </button>
 
       <button
-        v-for="person in staff"
+        v-for="(person, i) in staff"
         :key="person.id"
         type="button"
-        class="rounded-full border px-3 py-1 text-sm"
+        class="flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm"
         :class="
           filtroPersona === person.id
             ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
@@ -453,8 +503,17 @@ function onOpen(appointment: GridAppointment): void {
         "
         @click="filtroPersona = person.id"
       >
+        <!-- El color con que salen sus citas en la vista general. -->
+        <span
+          class="h-2.5 w-2.5 rounded-full"
+          :style="{ backgroundColor: colorDePersona(person.color, i) }"
+        />
         {{ person.name }}
       </button>
+      <span class="ml-auto flex items-center gap-1.5 text-xs text-slate-500">
+        <span class="h-2.5 w-2.5 rounded-sm border border-emerald-400 bg-emerald-100" />
+        Atendida
+      </span>
     </div>
 
     <!-- En semana se mira a una persona a la vez: 7 días × 3 personas serían

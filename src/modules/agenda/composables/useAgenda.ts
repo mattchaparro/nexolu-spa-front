@@ -23,6 +23,19 @@ export interface GridAppointment {
    * no el servidor: allá la cita ya viene colgada de su persona.
    */
   who?: string
+  /** El color de quien atiende, para pintar el bloque en la vista general. */
+  color?: string | null
+}
+
+/*
+ * Un color por persona cuando no tiene uno elegido en Equipo. Estable: sale
+ * del orden del equipo, así Alejandra es siempre la misma en la agenda.
+ * El verde queda reservado para lo ya atendido.
+ */
+const PALETA = ['#ec4899', '#8b5cf6', '#f59e0b', '#0ea5e9', '#f43f5e', '#14b8a6', '#6366f1', '#a855f7']
+
+export function colorDePersona(color: string | null | undefined, indice: number): string {
+  return color || PALETA[indice % PALETA.length]
 }
 
 export interface GridWindow {

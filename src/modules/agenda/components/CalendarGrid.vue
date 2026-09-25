@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 import type { GridAppointment, GridResource } from '../composables/useAgenda'
 import { toMinutes, toTime } from '../composables/useAgenda'
@@ -137,22 +137,113 @@ function onDrop(event: DragEvent, column: (typeof props.columns)[number]): void 
   dragging.value = null
 }
 
+/** Lo ya atendido va en verde, como en el sistema viejo. */
+function atendida(appointment: GridAppointment): boolean {
+  return appointment.is_paid || appointment.status === 'completed'
+}
+
 function blockClass(appointment: GridAppointment): string {
-  if (appointment.is_paid) {
-    return 'border-emerald-300 bg-emerald-50 text-emerald-900'
+  if (atendida(appointment)) {
+    return 'border-emerald-400 bg-emerald-100 text-emerald-900'
   }
 
-  return appointment.status === 'confirmed'
-    ? 'border-indigo-300 bg-indigo-50 text-indigo-900'
-    : 'border-slate-300 bg-white text-slate-800'
+  return 'border-slate-200 bg-white text-slate-800'
 }
+
+/** El color de quien atiende, en el borde y de fondo suave. */
+function blockStyle(appointment: GridAppointment, color: string | null | undefined): Record<string, string> {
+  const tono = appointment.color ?? color
+  if (atendida(appointment) || !tono) return {}
+
+  return { borderLeft: `4px solid ${tono}`, backgroundColor: `${tono}1f` }
+}
+
+/*
+ * Carriles: dos citas a la misma hora van lado a lado, no una encima de la
+ * otra. En la vista general pasa todo el tiempo -- Alejandra y Marcela
+ * atienden a la vez -- y encimadas no se podía leer ninguna.
+ */
+function carriles(citas: GridAppointment[]): Map<number, { carril: number; de: number }> {
+  const orden = [...citas].sort((a, b) => toMinutes(a.start) - toMinutes(b.start))
+  const resultado = new Map<number, { carril: number; de: number }>()
+  let grupo: GridAppointment[] = []
+  let finGrupo = -1
+  let finesPorCarril: number[] = []
+
+  const cerrar = (): void => {
+    const total = Math.max(1, finesPorCarril.length)
+    for (const c of grupo) {
+      const r = resultado.get(c.item_id)
+      if (r) r.de = total
+    }
+    grupo = []
+    finesPorCarril = []
+  }
+
+  for (const cita of orden) {
+    const inicio = toMinutes(cita.start)
+    const fin = toMinutes(cita.end)
+
+    if (grupo.length && inicio >= finGrupo) cerrar()
+
+    let carril = finesPorCarril.findIndex((f) => f <= inicio)
+    if (carril === -1) {
+      carril = finesPorCarril.length
+      finesPorCarril.push(fin)
+    } else {
+      finesPorCarril[carril] = fin
+    }
+
+    resultado.set(cita.item_id, { carril, de: 1 })
+    grupo.push(cita)
+    finGrupo = grupo.length === 1 ? fin : Math.max(finGrupo, fin)
+  }
+
+  cerrar()
+
+  return resultado
+}
+
+const carrilesPorColumna = computed(
+  () => new Map(props.columns.map((c) => [c.key, carriles(c.resource.appointments)])),
+)
+
+function posicion(column: (typeof props.columns)[number], appointment: GridAppointment): Record<string, string> {
+  const c = carrilesPorColumna.value.get(column.key)?.get(appointment.item_id) ?? { carril: 0, de: 1 }
+  const ancho = 100 / c.de
+
+  return {
+    top: `${top(appointment.start)}px`,
+    height: `${span(appointment.start, appointment.end)}px`,
+    left: `calc(${c.carril * ancho}% + 2px)`,
+    width: `calc(${ancho}% - 4px)`,
+  }
+}
+
+/*
+ * El scroll: la rejilla se desplaza por dentro, con los nombres arriba y las
+ * horas a la izquierda siempre a la vista, y abre en la hora actual. Antes
+ * se desplazaba la página entera y al bajar a la tarde ya no se sabía de
+ * quién era cada columna.
+ */
+const scroller = ref<HTMLElement | null>(null)
+
+function irALaHoraActual(): void {
+  const ahora = new Date()
+  const minuto = ahora.getHours() * 60 + ahora.getMinutes()
+  if (!scroller.value || minuto < startMin.value || minuto > endMin.value) return
+  scroller.value.scrollTop = Math.max(0, (minuto - startMin.value) * PX_PER_MIN - 120)
+}
+
+onMounted(() => nextTick(irALaHoraActual))
+watch(() => props.columns.map((c) => c.date).join(), () => nextTick(irALaHoraActual))
 </script>
 
 <template>
-  <div class="overflow-x-auto">
-    <div class="flex min-w-max">
-      <!-- Eje de horas -->
-      <div class="w-14 shrink-0 pt-9">
+  <div ref="scroller" class="max-h-[calc(100vh-13rem)] overflow-auto">
+    <div class="flex min-w-full">
+      <!-- Eje de horas: fijo a la izquierda al desplazarse de lado. -->
+      <div class="sticky left-0 z-20 w-14 shrink-0 bg-white pt-9">
         <div class="relative" :style="{ height: `${height}px` }">
           <div
             v-for="mark in hourMarks"
@@ -168,10 +259,11 @@ function blockClass(appointment: GridAppointment): string {
       <div
         v-for="column in columns"
         :key="column.key"
-        class="w-48 shrink-0 border-l border-slate-200"
+        class="min-w-[11rem] flex-1 border-l border-slate-200"
       >
+        <!-- Los nombres fijos arriba al desplazarse hacia la tarde. -->
         <header
-          class="flex h-9 items-center gap-2 border-b border-slate-200 px-3"
+          class="sticky top-0 z-10 flex h-9 items-center gap-2 border-b border-slate-200 bg-white px-3"
           :style="column.color ? { borderTop: `3px solid ${column.color}` } : undefined"
         >
           <span class="truncate text-sm font-medium text-slate-700">{{ column.label }}</span>
@@ -223,15 +315,12 @@ function blockClass(appointment: GridAppointment): string {
             v-for="appointment in column.resource.appointments"
             :key="appointment.item_id"
             :draggable="canEdit && !appointment.is_paid"
-            class="absolute inset-x-1 overflow-hidden rounded border px-1.5 py-0.5 text-xs shadow-sm"
+            class="absolute overflow-hidden rounded border px-1.5 py-0.5 text-xs shadow-sm"
             :class="[
               blockClass(appointment),
               canEdit && !appointment.is_paid ? 'cursor-grab' : 'cursor-pointer',
             ]"
-            :style="{
-              top: `${top(appointment.start)}px`,
-              height: `${span(appointment.start, appointment.end)}px`,
-            }"
+            :style="{ ...posicion(column, appointment), ...blockStyle(appointment, column.color) }"
             @click.stop="emit('open', appointment)"
             @dragstart="dragging = appointment"
             @dragend="onDragEnd"
