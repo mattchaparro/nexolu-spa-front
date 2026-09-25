@@ -132,15 +132,18 @@ const groupedHours = computed(() => {
           </p>
 
           <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-600">
+            <!-- Con la dirección escrita o solo con el enlace de Maps: Luxury
+                 guardó el enlace y no la dirección, y la página no mostraba
+                 dónde queda. -->
             <a
-              v-if="page.business.address"
+              v-if="page.business.address || page.profile.maps_url"
               :href="page.profile.maps_url ?? undefined"
               :target="page.profile.maps_url ? '_blank' : undefined"
               rel="noopener"
               class="flex items-center gap-1.5"
               :class="page.profile.maps_url ? 'underline' : ''"
             >
-              <i class="pi pi-map-marker" />{{ page.business.address }}
+              <i class="pi pi-map-marker" />{{ page.business.address || 'Ubicación' }}
             </a>
             <a
               v-if="page.profile.whatsapp"

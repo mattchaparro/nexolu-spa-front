@@ -52,6 +52,8 @@ const form = ref<Record<string, string>>({
  */
 const showStaffRatings = ref(false)
 const cover = ref<File | null>(null)
+/** El cuadro de la página: sin logo sale la inicial del negocio. */
+const logo = ref<File | null>(null)
 const offered = ref<Set<number>>(new Set())
 const error = ref<string | null>(null)
 
@@ -93,6 +95,10 @@ const { mutateAsync: save, isPending: saving } = useMutation({
       body.append('cover', cover.value)
     }
 
+    if (logo.value) {
+      body.append('logo', logo.value)
+    }
+
     return (await httpClient.post('/public-page', body)).data
   },
   onSuccess: () => queryClient.invalidateQueries({ queryKey: ['public-page'] }),
@@ -122,6 +128,7 @@ async function submit(): Promise<void> {
   try {
     await save()
     cover.value = null
+    logo.value = null
     notify('Tu página quedó actualizada.', 'success')
   } catch (e) {
     error.value = extractErrorMessage(e, 'No pudimos guardar la página.')
@@ -350,6 +357,23 @@ async function copyLink(url?: string): Promise<void> {
                 </span>
               </label>
             </div>
+
+            <label class="text-sm text-slate-700">
+              Logo
+              <input
+                type="file"
+                accept="image/*"
+                class="mt-1 block w-full text-sm text-slate-600"
+                :disabled="saving"
+                @change="logo = ($event.target as HTMLInputElement).files?.[0] ?? null"
+              />
+              <img
+                v-if="data.logo_url && !logo"
+                :src="data.logo_url"
+                alt="Logo actual"
+                class="mt-2 h-20 w-20 rounded-xl border border-slate-200 object-cover"
+              />
+            </label>
 
             <label class="text-sm text-slate-700">
               Foto de portada
