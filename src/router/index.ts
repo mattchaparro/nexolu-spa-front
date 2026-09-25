@@ -175,6 +175,17 @@ export const routes: RouteRecordRaw[] = [
   { path: '/whatsapp/chat', redirect: { name: 'inbox' } },
   {
     /*
+     * La puerta de Connect: su botón «Entrar con mi cuenta del Spa» trae
+     * aquí, y de aquí se sigue a Connect con la persona adentro. Sin sesión,
+     * el guard pasa primero por el login y vuelve (ver `redirect`).
+     */
+    path: '/abrir-connect',
+    name: 'open-connect',
+    component: () => import('@/modules/messages/views/OpenConnectView.vue'),
+    meta: { permission: 'clientes.ver' },
+  },
+  {
+    /*
      * La bandeja de salida.
      *
      * Con `citas.ver` y sin bandera de función: quien atiende el mostrador es
@@ -363,7 +374,14 @@ router.beforeEach(async (to) => {
   }
 
   if (!auth.isAuthenticated) {
-    return { name: 'login' }
+    /*
+     * Se recuerda a dónde iba: quien llega desde Connect a `/abrir-connect`
+     * tiene que terminar en el chat después de poner su clave, no en la
+     * agenda preguntándose qué pasó.
+     */
+    return to.fullPath === '/'
+      ? { name: 'login' }
+      : { name: 'login', query: { redirect: to.fullPath } }
   }
 
   // En una carga directa (F5, o pegar una URL) solo se restaura el token desde

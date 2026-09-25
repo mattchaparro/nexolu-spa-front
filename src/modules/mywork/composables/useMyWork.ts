@@ -89,6 +89,8 @@ export interface WalkInPayload {
   started_at?: string
   payment_method_id?: number | null
   final_price?: number
+  /** Registrarlo sin avisarle a nadie (solo el admin). */
+  silent?: boolean
   notes?: string
 }
 

@@ -7,6 +7,8 @@ import { usePaymentMethods } from '@/composables/usePaymentMethods'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 
+import SinAvisar from '@/modules/agenda/components/SinAvisar.vue'
+
 import {
   searchClients,
   useClientLookup,
@@ -39,6 +41,9 @@ const emit = defineEmits<{ close: []; saved: [] }>()
 
 const { money } = useMoney()
 const { mutateAsync, isPending } = useWalkIn()
+
+/** Registrarlo sin mandarle el gracias a la clienta: subir lo de otro día. */
+const silent = ref(false)
 
 const { data: services } = useServices()
 
@@ -184,6 +189,7 @@ watch(
     methodId.value = methods.value?.[0]?.id ?? null
     price.value = ''
     chargeNow.value = true
+    silent.value = false
     error.value = null
     fecha.value = ultimaFecha.value
     hora.value = fecha.value === hoy ? horaSugerida() : hora.value || '10:00'
@@ -235,6 +241,7 @@ async function submit(): Promise<void> {
       started_at: `${fecha.value}T${hora.value || '10:00'}`,
       payment_method_id: chargeNow.value ? methodId.value : null,
       final_price: chargeNow.value && price.value !== '' ? Number(price.value) : undefined,
+      silent: silent.value || undefined,
     })
     // Se recuerda para el siguiente: ponerse al día son varios del mismo día.
     ultimaFecha.value = fecha.value
@@ -353,6 +360,8 @@ async function submit(): Promise<void> {
       <p v-if="service && chargeNow" class="text-xs text-slate-500">
         Precio de lista {{ money(service.price) }} · {{ service.duration_min }} min
       </p>
+
+      <SinAvisar v-model="silent" :disabled="isPending" />
 
       <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
 

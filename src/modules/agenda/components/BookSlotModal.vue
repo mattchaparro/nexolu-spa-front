@@ -4,6 +4,8 @@ import { computed, ref, watch } from 'vue'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxDatePicker, NxInput, NxModal, NxSelect } from '@/ui'
 
+import SinAvisar from './SinAvisar.vue'
+
 import {
   searchClients,
   useBookAppointment,
@@ -82,6 +84,8 @@ const results = ref<ClientOption[]>([])
 const selected = ref<ClientOption | null>(null)
 const phone = ref('')
 const notes = ref('')
+/** Agendar sin confirmación a la clienta ni aviso a quien atiende. */
+const silent = ref(false)
 
 /*
 |------------------------------------------------------------------------------
@@ -195,6 +199,7 @@ watch(open, (isOpen) => {
   selected.value = null
   phone.value = ''
   notes.value = ''
+  silent.value = false
   esGarantia.value = false
   garantiaDe.value = null
   garantiaNota.value = ''
@@ -268,6 +273,7 @@ async function submit(): Promise<void> {
     is_warranty: esGarantia.value || undefined,
     warranty_for_resource_id: esGarantia.value ? garantiaDe.value : undefined,
     warranty_note: esGarantia.value ? garantiaNota.value.trim() || undefined : undefined,
+    silent: silent.value || undefined,
   }
 
   try {
@@ -660,6 +666,8 @@ async function submit(): Promise<void> {
             <NxInput v-model="garantiaNota" label="¿Qué pasó?" :disabled="isPending" />
           </div>
         </div>
+
+        <SinAvisar v-model="silent" :disabled="isPending" />
 
         <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
       </template>

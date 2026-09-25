@@ -344,6 +344,11 @@ function onCancelled(): void {
   notify('Cita cancelada. El horario vuelve a estar libre.', 'success')
 }
 
+function onDeleted(): void {
+  toCheckout.value = null
+  notify('Cita eliminada. No se le avisó a nadie.', 'success')
+}
+
 /** Abre el cobro de una cita tocada en la rejilla. */
 function onOpen(appointment: GridAppointment): void {
   if (appointment.is_paid) {
@@ -515,6 +520,7 @@ function onOpen(appointment: GridAppointment): void {
       @close="toCheckout = null"
       @done="onCharged"
       @cancelled="onCancelled"
+      @deleted="onDeleted"
     />
   </section>
 </template>

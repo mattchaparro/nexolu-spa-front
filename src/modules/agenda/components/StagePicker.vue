@@ -10,7 +10,7 @@ import {
   type StageOption,
 } from '../composables/useAppointments'
 
-const props = defineProps<{ appointmentId: number }>()
+const props = defineProps<{ appointmentId: number; silent?: boolean }>()
 
 const { data, isLoading } = useStageOptions(toRef(props, 'appointmentId'))
 const { mutateAsync: move, isPending } = useMoveStage()
@@ -30,6 +30,7 @@ async function pick(option: StageOption): Promise<void> {
       id: props.appointmentId,
       stageId: option.stage_id,
       status: option.stage_id === null ? option.maps_to_status : undefined,
+      silent: props.silent,
     })
 
     // Lo que se disparó se muestra acá y no en un toast que se va solo: si el

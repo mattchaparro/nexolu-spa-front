@@ -9,6 +9,7 @@ import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 
 import IdentificarCliente from './IdentificarCliente.vue'
 import LoyaltyCardPanel from './LoyaltyCardPanel.vue'
+import SinAvisar from './SinAvisar.vue'
 import StagePicker from './StagePicker.vue'
 import VenderEnElCobro from './VenderEnElCobro.vue'
 
@@ -17,14 +18,51 @@ import { useClientLoyalty } from '@/modules/settings/composables/useLoyalty'
 import {
   useCancelAppointment,
   useCheckout,
+  useDeleteAppointment,
   useRegisterDeposit,
   type Appointment,
 } from '../composables/useAppointments'
 
 const props = defineProps<{ appointment: Appointment | null }>()
-const emit = defineEmits<{ close: []; done: []; cancelled: [] }>()
+const emit = defineEmits<{ close: []; done: []; cancelled: []; deleted: [] }>()
 
 const { mutateAsync: cancelMutation } = useCancelAppointment()
+
+/*
+ * «No avisar a nadie» vale para todo lo que se haga en este modal: cobrar,
+ * cancelar y mover de etapa. Es una sola decisión sobre esta cita -- estoy
+ * corrigiendo, no atendiendo -- y pedirla tres veces invita a olvidarla en
+ * una de las tres.
+ */
+const silent = ref(false)
+
+const { mutateAsync: deleteMutation, isPending: eliminando } = useDeleteAppointment()
+
+async function deleteAppointment(): Promise<void> {
+  if (!props.appointment) {
+    return
+  }
+
+  const who = props.appointment.client_name ?? 'este cliente'
+  const reason = window.prompt(
+    `¿Eliminar la cita de ${who}? Desaparece de la agenda y no se le avisa a nadie.\n\nMotivo (opcional):`,
+    'Cargada por error',
+  )
+
+  // Cancelar el cuadro de diálogo devuelve null: no se elimina.
+  if (reason === null) {
+    return
+  }
+
+  error.value = null
+
+  try {
+    await deleteMutation({ id: props.appointment.id, reason: reason.trim() || undefined })
+    emit('deleted')
+  } catch (e) {
+    error.value = extractErrorMessage(e, 'No pudimos eliminar la cita.')
+  }
+}
 
 async function cancelAppointment(): Promise<void> {
   if (!props.appointment) {
@@ -37,7 +75,7 @@ async function cancelAppointment(): Promise<void> {
     return
   }
 
-  await cancelMutation({ id: props.appointment.id })
+  await cancelMutation({ id: props.appointment.id, silent: silent.value || undefined })
   emit('cancelled')
 }
 
@@ -217,6 +255,8 @@ watch(open, (isOpen) => {
     // Los precios vuelven a los de la carta: lo que se escribió para otra
     // cita no puede quedar colgado en ésta.
     preciosEscritos.value = {}
+    // Cada cita decide de nuevo: el silencio de la anterior no se hereda.
+    silent.value = false
   }
 })
 
@@ -257,6 +297,7 @@ async function submit(): Promise<void> {
         : undefined,
       discount_reason: discountReason.value.trim() || undefined,
       loyalty_reward_id: premioElegido.value,
+      silent: silent.value || undefined,
     })
     emit('done')
   } catch (e) {
@@ -292,8 +333,10 @@ async function submit(): Promise<void> {
            tocarlos devolvía "No tienes permiso para esta acción" en rojo,
            encima de la pantalla con la que está cobrando. Ella cobra con el
            botón de abajo, que sí es suyo. -->
+      <SinAvisar v-model="silent" :disabled="isPending" />
+
       <div v-if="auth.can('citas.editar')" class="border-b border-slate-100 pb-4">
-        <StagePicker :appointment-id="appointment.id" />
+        <StagePicker :appointment-id="appointment.id" :silent="silent" />
       </div>
 
       <NxSelect
@@ -529,16 +572,29 @@ async function submit(): Promise<void> {
       <div class="flex items-center justify-between gap-2">
         <!-- Cancelar la cita vive aca porque este modal es, en la practica, el
              detalle de la cita: es donde se actua sobre ella. -->
-        <NxButton
-          v-if="auth.can('citas.cancelar')"
-          variant="ghost"
-          size="sm"
-          :disabled="isPending"
-          @click="cancelAppointment"
-        >
-          Cancelar cita
-        </NxButton>
-        <span v-else />
+        <div class="flex gap-1">
+          <NxButton
+            v-if="auth.can('citas.cancelar')"
+            variant="ghost"
+            size="sm"
+            :disabled="isPending"
+            @click="cancelAppointment"
+          >
+            Cancelar cita
+          </NxButton>
+          <!-- Eliminar no es cancelar: es corregir una cita cargada por
+               error. No avisa a nadie y la cita desaparece. -->
+          <NxButton
+            v-if="auth.can('citas.eliminar') && !appointment.is_paid"
+            variant="ghost"
+            size="sm"
+            :loading="eliminando"
+            :disabled="isPending"
+            @click="deleteAppointment"
+          >
+            Eliminar
+          </NxButton>
+        </div>
 
         <div class="flex gap-2">
           <NxButton variant="secondary" :disabled="isPending" @click="emit('close')"

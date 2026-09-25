@@ -76,6 +76,8 @@ export interface BookPayload {
   client_name?: string
   client_phone?: string
   notes?: string
+  /** Agendar sin avisarle a la clienta ni al equipo (solo el admin). */
+  silent?: boolean
 }
 
 export function useAppointments(date: Ref<string>) {
@@ -108,12 +110,35 @@ export function useCancelAppointment() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ id, reason }: { id: number; reason?: string }) =>
-      (await httpClient.post<Appointment>(`/appointments/${id}/cancel`, { reason })).data,
+    mutationFn: async ({ id, reason, silent }: { id: number; reason?: string; silent?: boolean }) =>
+      (await httpClient.post<Appointment>(`/appointments/${id}/cancel`, { reason, silent })).data,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['availability'] })
       queryClient.invalidateQueries({ queryKey: ['appointments'] })
       queryClient.invalidateQueries({ queryKey: ['agenda'] })
+    },
+  })
+}
+
+/**
+ * Borrar una cita cargada por error: repetida, de prueba, a quien no era.
+ *
+ * No es cancelar -- nadie canceló nada --, así que no le avisa a nadie y la
+ * cita desaparece de la agenda. Una cita cobrada no se borra: primero se
+ * deshace el cobro.
+ */
+export function useDeleteAppointment() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: number; reason?: string }) => {
+      await httpClient.delete(`/appointments/${id}`, { data: { reason } })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['availability'] })
+      queryClient.invalidateQueries({ queryKey: ['appointments'] })
+      queryClient.invalidateQueries({ queryKey: ['agenda'] })
+      queryClient.invalidateQueries({ queryKey: ['my-work'] })
     },
   })
 }
@@ -147,6 +172,8 @@ export interface CheckoutPayload {
    * "lo escribí igual" de "no lo toqué".
    */
   item_prices?: Record<number, number>
+  /** Cobrar sin mandarle el gracias a la clienta (solo el admin). */
+  silent?: boolean
 }
 
 export function useCheckout() {
@@ -330,15 +357,18 @@ export function useMoveStage() {
       id,
       stageId,
       status,
+      silent,
     }: {
       id: number
       stageId?: number | null
       status?: string
+      silent?: boolean
     }) =>
       (
         await httpClient.post<{ actions: StageActionOutcome[] }>(`/appointments/${id}/stage`, {
           stage_id: stageId ?? null,
           status: status ?? null,
+          silent: silent || undefined,
         })
       ).data,
     onSuccess: () => {
