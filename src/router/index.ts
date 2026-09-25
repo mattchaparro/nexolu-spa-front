@@ -156,6 +156,13 @@ export const routes: RouteRecordRaw[] = [
     meta: { permission: 'negocio.configurar' },
   },
   {
+    // El asistente del panel: ventas, agenda y clientas, en palabras.
+    path: '/asistente',
+    name: 'assistant',
+    component: () => import('@/modules/assistant/views/AssistantView.vue'),
+    meta: { permission: 'ia.asistente' },
+  },
+  {
     // Las preguntas frecuentes que el bot de WhatsApp responde solo.
     path: '/configuracion/bot',
     name: 'bot-knowledge',

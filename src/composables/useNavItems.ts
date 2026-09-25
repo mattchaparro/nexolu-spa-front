@@ -16,6 +16,9 @@ const ITEMS: Array<NavItem & { permission?: string; onlyStaff?: boolean }> = [
   // negocio entero.
   { label: 'Mi día', icon: 'pi pi-user', routeName: 'my-work' },
 
+  // Preguntarle en palabras en vez de leer tablas.
+  { label: 'Asistente', icon: 'pi pi-sparkles', routeName: 'assistant', permission: 'ia.asistente' },
+
   {
     label: 'Agenda',
     icon: 'pi pi-calendar',
