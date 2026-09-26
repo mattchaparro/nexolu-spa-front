@@ -4,6 +4,7 @@ import { computed, ref, watch } from 'vue'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 
+import { useServiceCategories } from '@/modules/settings/composables/useCampaigns'
 import { useLocations } from '@/modules/settings/composables/useLocations'
 
 import { useSaveResource, type TeamResource } from '../composables/useCatalog'
@@ -59,6 +60,22 @@ interface Bloqueante {
 
 const bloqueantes = ref<Bloqueante[]>([])
 
+/*
+ * Descanso entre servicios de una categoría. Marcela no aguanta pedicures
+ * todos los días: con «día de por medio», si el lunes tiene uno no se le
+ * ofrece otro hasta el miércoles -- ni en WhatsApp ni en la página.
+ */
+const { data: categoriesData } = useServiceCategories()
+const categorias = computed(() => categoriesData.value ?? [])
+/** category_id → días de descanso (0 = todos los días). */
+const descanso = ref<Record<number, number>>({})
+
+const RITMOS = [
+  { value: 0, label: 'Todos los días' },
+  { value: 1, label: 'Día de por medio' },
+  { value: 2, label: 'Cada 3 días' },
+]
+
 const isEditing = computed(() => props.resource !== null)
 /** Sólo las personas llevan cuenta para entrar. Una cabina se ocupa, no entra. */
 const isPerson = computed(() => type.value === 'staff')
@@ -98,6 +115,9 @@ watch(
     preview.value = r?.photo_url ?? null
     error.value = null
     bloqueantes.value = []
+    descanso.value = Object.fromEntries(
+      (r?.category_rest_days ?? []).map((d) => [d.category_id, d.rest_days]),
+    )
   },
 )
 
@@ -124,6 +144,17 @@ async function submit(): Promise<void> {
         bio: bio.value.trim() || null,
         phone: phone.value.trim() || null,
         is_public: isPublic.value,
+        // Viaja como texto: el formulario es multipart por la foto.
+        ...(isPerson.value
+          ? {
+              category_rest_days: JSON.stringify(
+                Object.entries(descanso.value).map(([id, dias]) => ({
+                  category_id: Number(id),
+                  rest_days: Number(dias),
+                })),
+              ),
+            }
+          : {}),
         // Sólo se manda si de verdad cambió: el servidor rechaza el traslado
         // de quien tiene citas pendientes, y no tiene sentido arriesgar ese
         // 422 en un cambio de nombre.
@@ -258,11 +289,46 @@ async function submit(): Promise<void> {
            muchas manicuristas no tienen con qué entrar y aun así quieren
            saber que les agendaron. -->
       <div v-if="isPerson">
-        <NxInput v-model="phone" label="WhatsApp (opcional)" inputmode="tel" :disabled="isPending" />
+        <NxInput
+          v-model="phone"
+          label="WhatsApp (opcional)"
+          inputmode="tel"
+          :disabled="isPending"
+        />
         <p class="mt-1 text-xs text-slate-500">
           Si el negocio tiene encendidos los avisos al equipo, aquí le llega cuando le agenden o le
           cancelen una cita. Vacío = no recibe nada.
         </p>
+      </div>
+
+      <!-- Descanso entre servicios de una categoría. Solo al editar: la
+           regla mira citas ya agendadas, y alguien nuevo no tiene ninguna. -->
+      <div
+        v-if="isEditing && isPerson && categorias.length"
+        class="rounded-md border border-slate-200 p-3"
+      >
+        <p class="text-sm font-medium text-slate-700">Descanso entre servicios</p>
+        <p class="mb-3 mt-0.5 text-xs text-slate-500">
+          Con «día de por medio», si tiene un pedicure el lunes no se le ofrece otro hasta el
+          miércoles (ni por WhatsApp ni en la página). El mismo día puede hacer varios.
+        </p>
+        <div class="flex flex-col gap-2">
+          <label
+            v-for="c in categorias"
+            :key="c.id"
+            class="flex items-center justify-between gap-3 text-sm text-slate-700"
+          >
+            <span>{{ c.name }}</span>
+            <select
+              :value="descanso[c.id] ?? 0"
+              class="rounded-md border border-slate-300 px-2 py-1 text-sm"
+              :disabled="isPending"
+              @change="descanso[c.id] = Number(($event.target as HTMLSelectElement).value)"
+            >
+              <option v-for="r in RITMOS" :key="r.value" :value="r.value">{{ r.label }}</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       <!-- La reseña de la página pública. Corta a propósito: la lee alguien en

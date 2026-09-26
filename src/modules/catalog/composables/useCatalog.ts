@@ -79,6 +79,8 @@ export interface TeamResource {
   phone?: string | null
   /** Si sale en la sección de colaboradores. */
   is_public: boolean
+  /** Días de descanso entre dos servicios de una categoría (Marcela: pedicure día de por medio). */
+  category_rest_days?: Array<{ category_id: number; rest_days: number }>
 }
 
 export interface Schedule {
