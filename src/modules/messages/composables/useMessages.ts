@@ -84,7 +84,8 @@ export function useDiscardMessage() {
 
 /** Cómo se llama cada tipo en pantalla. `etapa` no le dice nada a nadie. */
 export const KIND_LABELS: Record<string, string> = {
-  recordatorio: 'Recordatorio',
+  recordatorio: 'Recordatorio (día antes)',
+  recordatorio_hoy: 'Recordatorio (3 h antes)',
   encuesta: 'Encuesta',
   etapa: 'Aviso de cita',
   confirmacion: 'Confirmación de cita',
