@@ -21,7 +21,23 @@ const outcomes = ref<StageActionOutcome[]>([])
 
 const options = computed<StageOption[]>(() => data.value?.options ?? [])
 
+/*
+ * Cancelar y «no asistió» piden confirmación. Eran un toque suelto al lado
+ * de «Confirmada»: un dedo que se va a la derecha y la cita queda cancelada
+ * (y cancelar no se deshace: el horario queda libre).
+ */
+const CONFIRMAR: Record<string, (label: string) => string> = {
+  cancelled: (label) =>
+    `¿Marcar la cita como «${label}»? El horario queda libre y no se puede deshacer: habría que volver a agendarla.`,
+  no_show: (label) => `¿Marcar la cita como «${label}»?`,
+}
+
 async function pick(option: StageOption): Promise<void> {
+  const pregunta = CONFIRMAR[option.maps_to_status]
+  if (pregunta && !window.confirm(pregunta(option.label))) {
+    return
+  }
+
   error.value = null
   outcomes.value = []
 

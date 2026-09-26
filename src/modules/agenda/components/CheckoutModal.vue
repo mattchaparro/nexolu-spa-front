@@ -5,7 +5,7 @@ import { usePaymentMethods } from '@/composables/usePaymentMethods'
 import { useSystemAlert } from '@/composables/useSystemAlert'
 import { useAuthStore } from '@/stores/auth.store'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
-import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
+import { NxButton, NxInput, NxModal } from '@/ui'
 
 import IdentificarCliente from './IdentificarCliente.vue'
 import LoyaltyCardPanel from './LoyaltyCardPanel.vue'
@@ -19,6 +19,7 @@ import {
   useCancelAppointment,
   useCheckout,
   useDeleteAppointment,
+  useMoveStage,
   useRegisterDeposit,
   type Appointment,
 } from '../composables/useAppointments'
@@ -130,7 +131,22 @@ const cambiados = computed(() =>
 const subtotal = computed(
   () => props.appointment?.items.reduce((sum, item) => sum + precioDe(item), 0) ?? 0,
 )
-const discountValue = computed(() => Math.max(0, Number(discount.value) || 0))
+/*
+ * El descuento se elige, no se escribe: 10, 15 o 20 % cubren casi todo, y
+ * escribir la cifra a mano era hacer la cuenta de cabeza en el mostrador.
+ * «Otro valor» queda para lo raro.
+ */
+const DESCUENTOS = [10, 15, 20] as const
+/** 0 = sin descuento; un número = ese porcentaje; 'otro' = la cifra escrita. */
+const discountMode = ref<number | 'otro'>(0)
+
+const discountValue = computed(() => {
+  if (discountMode.value === 'otro') {
+    return Math.max(0, Number(discount.value) || 0)
+  }
+
+  return Math.round((subtotal.value * discountMode.value) / 100)
+})
 const total = computed(() => Math.max(0, subtotal.value - discountValue.value))
 
 /*
@@ -251,6 +267,7 @@ watch(open, (isOpen) => {
   if (isOpen) {
     paymentMethodId.value = methods.value?.[0]?.id ?? null
     discount.value = ''
+    discountMode.value = 0
     discountReason.value = ''
     error.value = null
     // Se suelta la copia local: la cita que se abre ahora es otra.
@@ -286,6 +303,38 @@ const canSubmit = computed(
   () => paymentMethodId.value !== null && discountValue.value <= subtotal.value && !isPending.value,
 )
 
+/*
+ * Completada sin cobrar: pasaba al tocar «Completado» en los botones de
+ * estado (ya no se ofrece). No sale en ventas ni en el cierre. Se puede
+ * cobrar desde aquí mismo, o volver a abrirla si se completó por error.
+ */
+const completadaSinCobrar = computed(
+  () => cita.value?.status === 'completed' && cita.value?.is_paid === false,
+)
+
+const { mutateAsync: moverEtapa, isPending: reabriendo } = useMoveStage()
+
+async function reabrir(): Promise<void> {
+  if (!props.appointment) {
+    return
+  }
+
+  error.value = null
+
+  try {
+    const result = await moverEtapa({
+      id: props.appointment.id,
+      stageId: null,
+      status: 'confirmed',
+      silent: true,
+    })
+    recienActualizada.value = result.appointment
+    notify('La cita volvió a quedar abierta.', 'success')
+  } catch (e) {
+    error.value = extractErrorMessage(e, 'No pudimos volver a abrirla.')
+  }
+}
+
 async function submit(): Promise<void> {
   if (!props.appointment || paymentMethodId.value === null) {
     return
@@ -303,7 +352,11 @@ async function submit(): Promise<void> {
       item_prices: cambiados.value.length
         ? Object.fromEntries(cambiados.value.map((i) => [i.id, precioDe(i)]))
         : undefined,
-      discount_reason: discountReason.value.trim() || undefined,
+      discount_reason:
+        discountReason.value.trim() ||
+        (typeof discountMode.value === 'number' && discountMode.value > 0
+          ? `Descuento ${discountMode.value}%`
+          : undefined),
       loyalty_reward_id: premioElegido.value,
       silent: silent.value || undefined,
     })
@@ -351,31 +404,86 @@ async function submit(): Promise<void> {
            tocarlos devolvía "No tienes permiso para esta acción" en rojo,
            encima de la pantalla con la que está cobrando. Ella cobra con el
            botón de abajo, que sí es suyo. -->
+      <div
+        v-if="completadaSinCobrar"
+        class="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+      >
+        <p class="font-medium">Esta cita quedó completada sin cobrarse.</p>
+        <p class="mt-0.5 text-xs">
+          Por eso no aparece en las ventas del día. Cóbrala abajo, o vuelve a abrirla si se completó
+          por error.
+        </p>
+        <NxButton
+          v-if="auth.can('citas.editar')"
+          class="mt-2"
+          size="sm"
+          variant="secondary"
+          :loading="reabriendo"
+          :disabled="isPending"
+          @click="reabrir"
+        >
+          Volver a abrirla
+        </NxButton>
+      </div>
+
       <SinAvisar v-model="silent" :disabled="isPending" />
 
-      <div v-if="auth.can('citas.editar')" class="border-b border-slate-100 pb-4">
+      <div
+        v-if="auth.can('citas.editar') && !completadaSinCobrar"
+        class="border-b border-slate-100 pb-4"
+      >
         <StagePicker :appointment-id="appointment.id" :silent="silent" />
       </div>
 
-      <NxSelect
-        v-model="paymentMethodId"
-        :options="methods ?? []"
-        option-label="name"
-        option-value="id"
-        label="Método de pago"
-        :disabled="isPending"
-      />
-
-      <div class="flex gap-3">
-        <div class="w-40">
-          <NxInput v-model="discount" label="Descuento" inputmode="numeric" :disabled="isPending" />
+      <!-- Botones y no una lista desplegable: son tres o cuatro medios y se
+           eligen con un toque, sin abrir nada. -->
+      <div>
+        <p class="mb-1.5 text-sm font-medium text-slate-700">Medio de pago</p>
+        <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <button
+            v-for="m in methods ?? []"
+            :key="m.id"
+            type="button"
+            class="rounded-lg border px-3 py-2.5 text-sm font-medium transition"
+            :class="
+              paymentMethodId === m.id
+                ? 'border-indigo-600 bg-indigo-600 text-white'
+                : 'border-slate-200 text-slate-700 hover:border-indigo-300'
+            "
+            :disabled="isPending"
+            @click="paymentMethodId = m.id"
+          >
+            {{ m.name }}
+          </button>
         </div>
-        <div class="flex-1">
-          <NxInput
-            v-model="discountReason"
-            label="Motivo (opcional)"
-            :disabled="isPending || discountValue === 0"
-          />
+      </div>
+
+      <div>
+        <p class="mb-1.5 text-sm font-medium text-slate-700">Descuento</p>
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-for="opcion in [0, ...DESCUENTOS, 'otro' as const]"
+            :key="opcion"
+            type="button"
+            class="rounded-full border px-3 py-1.5 text-sm transition"
+            :class="
+              discountMode === opcion
+                ? 'border-amber-500 bg-amber-500 font-medium text-white'
+                : 'border-slate-200 text-slate-700 hover:border-amber-300'
+            "
+            :disabled="isPending"
+            @click="discountMode = opcion"
+          >
+            {{ opcion === 0 ? 'Sin descuento' : opcion === 'otro' ? 'Otro valor' : `${opcion}%` }}
+          </button>
+        </div>
+        <div v-if="discountMode !== 0" class="mt-2 flex gap-3">
+          <div v-if="discountMode === 'otro'" class="w-40">
+            <NxInput v-model="discount" label="Valor" inputmode="numeric" :disabled="isPending" />
+          </div>
+          <div class="flex-1">
+            <NxInput v-model="discountReason" label="Motivo (opcional)" :disabled="isPending" />
+          </div>
         </div>
       </div>
 

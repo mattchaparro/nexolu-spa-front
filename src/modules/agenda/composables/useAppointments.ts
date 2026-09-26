@@ -367,11 +367,14 @@ export function useMoveStage() {
       silent?: boolean
     }) =>
       (
-        await httpClient.post<{ actions: StageActionOutcome[] }>(`/appointments/${id}/stage`, {
-          stage_id: stageId ?? null,
-          status: status ?? null,
-          silent: silent || undefined,
-        })
+        await httpClient.post<{ appointment: Appointment; actions: StageActionOutcome[] }>(
+          `/appointments/${id}/stage`,
+          {
+            stage_id: stageId ?? null,
+            status: status ?? null,
+            silent: silent || undefined,
+          },
+        )
       ).data,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agenda'] })
