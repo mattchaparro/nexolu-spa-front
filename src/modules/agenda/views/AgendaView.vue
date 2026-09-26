@@ -398,22 +398,45 @@ function onOpen(appointment: GridAppointment): void {
 
 <template>
   <section class="flex h-full flex-col p-4 md:p-6">
-    <header class="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <div>
+    <!--
+      Tres filas, cada una con un solo trabajo:
+        1. Qué pantalla es, y la acción principal (agendar) a la derecha.
+        2. Qué día/semana se mira y cómo (moverse, fecha, día/semana).
+        3. De quién (filtro por persona), con el conteo y la leyenda.
+      Antes todo iba en una sola fila que se partía en cualquier lado.
+    -->
+    <header class="mb-3 flex items-center justify-between gap-3">
+      <div class="min-w-0">
         <h1 class="text-xl font-semibold text-slate-800">Agenda</h1>
-        <p class="text-sm text-slate-500">
+        <!-- En el teléfono la barra de arriba ya dice el negocio. -->
+        <p v-if="auth.business?.name" class="hidden truncate text-sm text-slate-500 md:block">
           {{ auth.business?.name }}
-          <span v-if="agenda" class="text-slate-400">· {{ agenda.timezone }}</span>
         </p>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2">
-        <!-- Primero en el orden de lectura y visualmente destacado: agendar es
-             lo que más se hace en esta pantalla. -->
-        <NxButton v-if="canEdit" size="sm" @click="openComposer">
-          <i class="pi pi-plus mr-1.5 text-xs" />Agendar cita
-        </NxButton>
+      <!-- Lo que más se hace en esta pantalla: grande y siempre a la vista. -->
+      <NxButton v-if="canEdit" size="lg" class="shrink-0" @click="openComposer">
+        <i class="pi pi-plus mr-2 text-sm" />Agendar cita
+      </NxButton>
+    </header>
 
+    <div class="mb-3 flex flex-wrap items-center gap-2">
+      <!-- Moverse en el tiempo: anterior, hoy, siguiente, y la fecha exacta. -->
+      <div class="flex items-center gap-1">
+        <NxButton variant="outline" size="sm" aria-label="Anterior" @click="shift(-1)">
+          <i class="pi pi-chevron-left text-xs" />
+        </NxButton>
+        <NxButton variant="outline" size="sm" @click="today">Hoy</NxButton>
+        <NxButton variant="outline" size="sm" aria-label="Siguiente" @click="shift(1)">
+          <i class="pi pi-chevron-right text-xs" />
+        </NxButton>
+      </div>
+
+      <div class="min-w-0 flex-1 md:w-40 md:flex-none">
+        <NxDatePicker v-model="anchor" />
+      </div>
+
+      <div class="flex w-full flex-wrap items-center gap-2 md:ml-auto md:w-auto">
         <!-- Sólo con más de un local. Un selector de una sola opción es ruido
              en la barra más usada del producto. -->
         <select
@@ -443,44 +466,40 @@ function onOpen(appointment: GridAppointment): void {
           </button>
         </div>
 
-        <div class="flex overflow-hidden rounded-md border border-slate-200">
+        <div class="flex flex-1 overflow-hidden rounded-md border border-slate-200 md:flex-none">
           <button
             v-for="option in ['day', 'week'] as View[]"
             :key="option"
             type="button"
-            class="px-3 py-1.5 text-sm"
+            class="flex-1 px-3 py-1.5 text-sm md:flex-none"
             :class="view === option ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600'"
             @click="view = option"
           >
             {{ option === 'day' ? 'Día' : 'Semana' }}
           </button>
         </div>
-
-        <NxButton variant="outline" size="sm" @click="shift(-1)">‹</NxButton>
-        <NxButton variant="outline" size="sm" @click="today">Hoy</NxButton>
-        <NxButton variant="outline" size="sm" @click="shift(1)">›</NxButton>
-
-        <div class="w-40">
-          <NxDatePicker v-model="anchor" />
-        </div>
       </div>
-    </header>
+    </div>
 
     <!--
-      En el teléfono, en vista de día: una sola grilla con todas las citas y
-      estos chips para filtrar. Una columna por persona en una pantalla de
-      cinco pulgadas deja cada una de un centímetro, y obliga a desplazarse a
-      lo ancho para saber qué pasa a las once.
+      De quién. En el teléfono, en vista de día: una sola grilla con todas las
+      citas y estos chips para filtrar (una columna por persona en cinco
+      pulgadas deja cada una de un centímetro). En semana se mira a una persona
+      a la vez: 7 días × 3 personas serían 21 columnas.
 
-      Sólo con más de una persona: filtrar entre una es ruido.
+      Una sola fila que se desliza de lado en el teléfono, en vez de partirse
+      en tres renglones. Sólo con más de una persona: filtrar entre una es ruido.
     -->
     <div
-      v-if="(enTelefono || modo === 'general') && view === 'day' && staff.length > 1"
-      class="mb-3 flex flex-wrap gap-2"
+      v-if="
+        staff.length > 1 && ((view === 'day' && (enTelefono || modo === 'general')) || view === 'week')
+      "
+      class="-mx-4 mb-2 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:flex-wrap md:px-0"
     >
       <button
+        v-if="view === 'day'"
         type="button"
-        class="rounded-full border px-3 py-1 text-sm"
+        class="shrink-0 rounded-full border px-3 py-1 text-sm"
         :class="
           filtroPersona === null
             ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
@@ -495,55 +514,37 @@ function onOpen(appointment: GridAppointment): void {
         v-for="(person, i) in staff"
         :key="person.id"
         type="button"
-        class="flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm"
+        class="flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-sm"
         :class="
-          filtroPersona === person.id
+          (view === 'day' ? filtroPersona : (focusedResourceId ?? staff[0]?.id)) === person.id
             ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
             : 'border-slate-200 bg-white text-slate-600'
         "
-        @click="filtroPersona = person.id"
+        @click="view === 'day' ? (filtroPersona = person.id) : (focusedResourceId = person.id)"
       >
         <!-- El color con que salen sus citas en la vista general. -->
         <span
+          v-if="view === 'day'"
           class="h-2.5 w-2.5 rounded-full"
           :style="{ backgroundColor: colorDePersona(person.color, i) }"
         />
         {{ person.name }}
       </button>
-      <span class="ml-auto flex items-center gap-1.5 text-xs text-slate-500">
+    </div>
+
+    <div class="mb-2 flex items-center gap-3 text-xs text-slate-500">
+      <span v-if="isFetching">Cargando…</span>
+      <span v-else>{{ totalAppointments }} {{ totalAppointments === 1 ? 'cita' : 'citas' }}</span>
+      <!-- El atajo de la rejilla se menciona sólo donde existe: en un teléfono
+           no se arrastra nada y el texto sólo ocuparía sitio. -->
+      <span v-if="canEdit" class="hidden text-slate-400 md:inline">
+        Toca un espacio libre para agendar, arrastra una cita para moverla
+      </span>
+      <span v-if="view === 'day'" class="ml-auto flex items-center gap-1.5">
         <span class="h-2.5 w-2.5 rounded-sm border border-emerald-400 bg-emerald-100" />
         Atendida
       </span>
     </div>
-
-    <!-- En semana se mira a una persona a la vez: 7 días × 3 personas serían
-         21 columnas y ninguna se leería. -->
-    <div v-if="view === 'week' && staff.length > 1" class="mb-3 flex flex-wrap gap-2">
-      <button
-        v-for="person in staff"
-        :key="person.id"
-        type="button"
-        class="rounded-full border px-3 py-1 text-sm"
-        :class="
-          (focusedResourceId ?? staff[0]?.id) === person.id
-            ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
-            : 'border-slate-200 bg-white text-slate-600'
-        "
-        @click="focusedResourceId = person.id"
-      >
-        {{ person.name }}
-      </button>
-    </div>
-
-    <p class="mb-2 text-sm text-slate-500">
-      <span v-if="isFetching">Cargando…</span>
-      <span v-else>{{ totalAppointments }} cita(s)</span>
-      <!-- El atajo de la rejilla se menciona sólo donde existe: en un teléfono
-           no se arrastra nada y el texto sólo ocuparía sitio. -->
-      <span v-if="canEdit" class="ml-2 hidden text-slate-400 md:inline">
-        · Toca un espacio libre para agendar, arrastra una cita para moverla
-      </span>
-    </p>
 
     <div class="flex-1 rounded-lg border border-slate-200 bg-white">
       <p v-if="!columns.length" class="px-4 py-10 text-center text-sm text-slate-500">
