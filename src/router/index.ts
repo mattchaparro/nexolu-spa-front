@@ -150,6 +150,12 @@ export const routes: RouteRecordRaw[] = [
     meta: {},
   },
   {
+    path: '/whatsapp/gasto',
+    name: 'whatsapp-spend',
+    component: () => import('@/modules/messages/views/WhatsappSpendView.vue'),
+    meta: { permission: 'negocio.configurar' },
+  },
+  {
     path: '/configuracion/medios-de-pago',
     name: 'payment-methods',
     component: () => import('@/modules/settings/views/PaymentMethodsView.vue'),

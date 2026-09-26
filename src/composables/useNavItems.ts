@@ -145,6 +145,13 @@ const ITEMS: Array<NavItem & { permission?: string; onlyStaff?: boolean }> = [
     routeName: 'locations',
     permission: 'negocio.configurar',
   },
+  // Lo que Meta cobra por WhatsApp: solo quien administra el negocio.
+  {
+    label: 'Gasto de WhatsApp',
+    icon: 'pi pi-wallet',
+    routeName: 'whatsapp-spend',
+    permission: 'negocio.configurar',
+  },
   {
     label: 'Mi página',
     icon: 'pi pi-globe',
