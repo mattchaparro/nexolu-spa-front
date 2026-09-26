@@ -149,6 +149,19 @@ export const routes: RouteRecordRaw[] = [
     // alguien que atiende, la pantalla se lo dice.
     meta: {},
   },
+  // Lo suyo, aparte de Mi día: la pregunta del viernes, no la del trabajo.
+  {
+    path: '/mis-ganancias',
+    name: 'my-earnings',
+    component: () => import('@/modules/mywork/views/MyEarningsView.vue'),
+    meta: {},
+  },
+  {
+    path: '/mis-vales',
+    name: 'my-advances',
+    component: () => import('@/modules/mywork/views/MyAdvancesView.vue'),
+    meta: {},
+  },
   {
     path: '/whatsapp/gasto',
     name: 'whatsapp-spend',

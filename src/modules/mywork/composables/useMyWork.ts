@@ -51,6 +51,8 @@ export interface MyWork {
     net: number
   } | null
   today: Earned
+  week: Earned
+  month: Earned
   pending_checkout: Array<{
     id: number
     client_name: string | null
@@ -60,6 +62,18 @@ export interface MyWork {
   agenda: AgendaRow[]
   ratings: MyRatings
   payments: MyPayment[]
+  /** Sus vales: adelantos, insumos… los pendientes se le restan en el próximo pago. */
+  adjustments: MyAdjustment[]
+}
+
+export interface MyAdjustment {
+  id: number
+  date: string | null
+  kind: 'deduction' | 'bonus'
+  label: string
+  description: string | null
+  amount: number
+  pending: boolean
 }
 
 /**

@@ -1,7 +1,8 @@
 import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 
 import { useAuthStore } from '@/stores/auth.store'
-import type { NavItem } from '@/types/navigation'
+import type { NavBadgeKey, NavItem, NavTab } from '@/types/navigation'
 
 /**
  * El menu se arma cruzando permisos y feature flags contra las MISMAS metas
@@ -10,15 +11,37 @@ import type { NavItem } from '@/types/navigation'
  * Es deliberado que sea una sola fuente: cuando el menu decide por su cuenta
  * que mostrar, termina ofreciendo opciones que el guard rechaza o el backend
  * responde con 403.
+ *
+ * AGRUPADO (26-sep-2026). Eran 27 opciones sueltas: lo de WhatsApp en cinco
+ * lugares, lo del equipo en cuatro. Ahora son pocas entradas y cada una trae
+ * sus pantallas como pestañas arriba (ver `currentTabs` y AppLayout). Ninguna
+ * pantalla se perdió, y cada pestaña sigue saliendo según los permisos de
+ * quien entra: la entrada del menú lleva a la primera que puede ver.
  */
-const ITEMS: Array<NavItem & { permission?: string; onlyStaff?: boolean }> = [
-  // Primero lo suyo: quien atiende entra a ver su dia, no la agenda del
-  // negocio entero.
-  { label: 'Mi día', icon: 'pi pi-user', routeName: 'my-work' },
+interface Entry {
+  label: string
+  icon?: string
+  routeName: string
+  permission?: string
+  featureKey?: string
+  badgeKey?: NavBadgeKey
+  /** Solo para quien atiende (tiene un lugar en la agenda). */
+  onlyStaff?: boolean
+}
 
-  // Preguntarle en palabras en vez de leer tablas.
-  { label: 'Asistente', icon: 'pi pi-sparkles', routeName: 'assistant', permission: 'ia.asistente' },
+interface Group {
+  label: string
+  icon: string
+  tabs: Entry[]
+}
 
+const MENU: Array<Entry | Group> = [
+  /*
+   * Lo suyo primero. Para quien atiende el menú es esto y la agenda, nada
+   * más: su día, lo que lleva ganado y sus vales. Lo demás (mensajes, lista
+   * de espera, productos) no era de ella y la distraía.
+   */
+  { label: 'Mi día', icon: 'pi pi-user', routeName: 'my-work', onlyStaff: true },
   {
     label: 'Agenda',
     icon: 'pi pi-calendar',
@@ -26,210 +49,244 @@ const ITEMS: Array<NavItem & { permission?: string; onlyStaff?: boolean }> = [
     permission: 'citas.ver',
     featureKey: 'scheduling',
   },
-  /*
-   * Sin `featureKey`: mientras no haya WhatsApp conectado, esta pantalla ES la
-   * mensajería del negocio. Esconderla detrás de una bandera dejaría los avisos
-   * preparados donde nadie los ve, que es exactamente lo que pasaba antes.
-   */
-  /*
-   * La bandeja de WhatsApp va ANTES de "Mensajes": lo que una clienta escribió
-   * y espera respuesta pesa más que lo que el sistema preparó para mandar.
-   *
-   * Con `clientes.ver` y NO con `citas.ver`: la bandeja muestra el teléfono y
-   * el nombre de todas las clientas que han escrito, no solo las que uno
-   * atiende. Eso es la base de clientes del negocio.
-   */
+  { label: 'Mis ganancias', icon: 'pi pi-wallet', routeName: 'my-earnings', onlyStaff: true },
+  { label: 'Mis vales', icon: 'pi pi-ticket', routeName: 'my-advances', onlyStaff: true },
+
+  // Preguntarle en palabras en vez de leer tablas.
+  {
+    label: 'Asistente',
+    icon: 'pi pi-sparkles',
+    routeName: 'assistant',
+    permission: 'ia.asistente',
+  },
+
   {
     label: 'WhatsApp',
-    icon: 'pi pi-comments',
-    routeName: 'inbox',
-    permission: 'clientes.ver',
-    badgeKey: 'inbox_unread',
+    icon: 'pi pi-whatsapp',
+    tabs: [
+      /*
+       * Con `clientes.ver` y NO con `citas.ver`: la bandeja muestra el
+       * teléfono y el nombre de todas las clientas que han escrito. Eso es
+       * la base de clientes del negocio.
+       */
+      {
+        label: 'Conversaciones',
+        routeName: 'inbox',
+        permission: 'clientes.ver',
+        badgeKey: 'inbox_unread',
+      },
+      // Lo que el sistema prepara y manda solo: recordatorios, gracias...
+      // Con `citas.ver_todas`: a quien atiende no le sirve.
+      {
+        label: 'Mensajes automáticos',
+        routeName: 'outbox',
+        permission: 'citas.ver_todas',
+        badgeKey: 'outbox_pending',
+      },
+      /*
+       * Aparte de «Campañas», que son descuentos. Una difusión es un mensaje
+       * que SALE hacia las clientas y se paga por cada uno.
+       */
+      {
+        label: 'Difusiones',
+        routeName: 'broadcasts',
+        permission: 'servicios.gestionar',
+        featureKey: 'promotions',
+      },
+      { label: 'Enséñale al bot', routeName: 'bot-knowledge', permission: 'ia.conocimiento' },
+      // Lo que Meta cobra por WhatsApp: solo quien administra el negocio.
+      { label: 'Gasto', routeName: 'whatsapp-spend', permission: 'negocio.configurar' },
+    ],
   },
-  {
-    label: 'Mensajes',
-    icon: 'pi pi-send',
-    routeName: 'outbox',
-    permission: 'citas.ver',
-    badgeKey: 'outbox_pending',
-  },
-  {
-    label: 'Lista de espera',
-    icon: 'pi pi-hourglass',
-    routeName: 'waitlist',
-    permission: 'citas.ver',
-    featureKey: 'reminders',
-  },
+
   {
     label: 'Clientes',
     icon: 'pi pi-users',
-    routeName: 'clients',
-    permission: 'clientes.ver',
-    featureKey: 'clients',
+    tabs: [
+      {
+        label: 'Clientes',
+        routeName: 'clients',
+        permission: 'clientes.ver',
+        featureKey: 'clients',
+      },
+      {
+        label: 'Lista de espera',
+        routeName: 'waitlist',
+        permission: 'citas.ver_todas',
+        featureKey: 'reminders',
+      },
+      {
+        label: 'Fidelización',
+        routeName: 'loyalty',
+        permission: 'servicios.gestionar',
+        featureKey: 'loyalty',
+      },
+    ],
   },
 
-  // Solo aparece si el negocio opera con turnos de caja. Viene apagado: en un
-  // spa nadie abre y cierra caja, lo que importa es el cierre del dia.
   {
-    label: 'Mi turno',
-    icon: 'pi pi-wallet',
-    routeName: 'cash-shift',
-    permission: 'caja.turno',
-    featureKey: 'cash_shift',
-  },
-
-  {
-    label: 'Resumen',
+    label: 'Caja',
     icon: 'pi pi-chart-line',
-    routeName: 'daily-summary',
-    permission: 'reportes.ver',
-    featureKey: 'reports',
+    tabs: [
+      {
+        label: 'Resumen del día',
+        routeName: 'daily-summary',
+        permission: 'reportes.ver',
+        featureKey: 'reports',
+      },
+      {
+        label: 'Cierre',
+        routeName: 'daily-closing',
+        permission: 'caja.cierre',
+        featureKey: 'cash_closing',
+      },
+      {
+        label: 'Ventas',
+        routeName: 'sales-report',
+        permission: 'reportes.ver',
+        featureKey: 'reports',
+      },
+      {
+        label: 'Gastos',
+        routeName: 'expenses',
+        permission: 'gastos.gestionar',
+        featureKey: 'expenses',
+      },
+      // Solo si el negocio opera con turnos de caja. Viene apagado.
+      {
+        label: 'Mi turno',
+        routeName: 'cash-shift',
+        permission: 'caja.turno',
+        featureKey: 'cash_shift',
+      },
+    ],
   },
-  {
-    label: 'Ventas',
-    icon: 'pi pi-chart-bar',
-    routeName: 'sales-report',
-    permission: 'reportes.ver',
-    featureKey: 'reports',
-  },
-  {
-    label: 'Cierre',
-    icon: 'pi pi-lock',
-    routeName: 'daily-closing',
-    permission: 'caja.cierre',
-    featureKey: 'cash_closing',
-  },
-  {
-    label: 'Gastos',
-    icon: 'pi pi-receipt',
-    routeName: 'expenses',
-    permission: 'gastos.gestionar',
-    featureKey: 'expenses',
-  },
-  {
-    label: 'Nómina',
-    icon: 'pi pi-money-bill',
-    routeName: 'payroll',
-    permission: 'nomina.gestionar',
-    featureKey: 'payroll',
-  },
-  {
-    label: 'Servicios',
-    icon: 'pi pi-sparkles',
-    routeName: 'services',
-    permission: 'servicios.gestionar',
-  },
-  /*
-   * Con `citas.ver` y no con `servicios.gestionar`: quien atiende tiene que
-   * poder mirar si queda crema y venderla. Las acciones de dentro sí piden el
-   * permiso que corresponde.
-   */
-  {
-    label: 'Productos',
-    icon: 'pi pi-shopping-bag',
-    routeName: 'products',
-    permission: 'citas.ver',
-    featureKey: 'product_sales',
-  },
+
   {
     label: 'Equipo',
     icon: 'pi pi-id-card',
-    routeName: 'resources',
-    permission: 'recursos.gestionar',
+    tabs: [
+      { label: 'Personas', routeName: 'resources', permission: 'recursos.gestionar' },
+      {
+        label: 'Nómina',
+        routeName: 'payroll',
+        permission: 'nomina.gestionar',
+        featureKey: 'payroll',
+      },
+      {
+        label: 'Cómo se les paga',
+        routeName: 'compensation',
+        permission: 'nomina.gestionar',
+        featureKey: 'payroll',
+      },
+      {
+        label: 'Permisos',
+        routeName: 'permissions',
+        permission: 'permisos.gestionar',
+        featureKey: 'permissions_management',
+      },
+    ],
   },
-  // Sin `featureKey`: el negocio de un solo local también entra, aunque sea
-  // para ponerle dirección y enlace de Maps a su sede.
+
   {
-    label: 'Sedes',
-    icon: 'pi pi-map-marker',
-    routeName: 'locations',
-    permission: 'negocio.configurar',
+    label: 'Catálogo',
+    icon: 'pi pi-tags',
+    tabs: [
+      { label: 'Servicios', routeName: 'services', permission: 'servicios.gestionar' },
+      /*
+       * En el menú con `citas.ver_todas`: la crema se vende dentro del cobro,
+       * así que quien atiende no necesita la pantalla. La ruta sigue abierta
+       * con `citas.ver` por si alguien entra por el enlace.
+       */
+      {
+        label: 'Productos',
+        routeName: 'products',
+        permission: 'citas.ver_todas',
+        featureKey: 'product_sales',
+      },
+      {
+        label: 'Campañas',
+        routeName: 'campaigns',
+        permission: 'servicios.gestionar',
+        featureKey: 'promotions',
+      },
+    ],
   },
-  // Lo que Meta cobra por WhatsApp: solo quien administra el negocio.
+
   {
-    label: 'Gasto de WhatsApp',
-    icon: 'pi pi-wallet',
-    routeName: 'whatsapp-spend',
-    permission: 'negocio.configurar',
-  },
-  {
-    label: 'Mi página',
-    icon: 'pi pi-globe',
-    routeName: 'public-page',
-    permission: 'negocio.configurar',
-    featureKey: 'online_booking',
-  },
-  {
-    label: 'Campañas',
-    icon: 'pi pi-megaphone',
-    routeName: 'campaigns',
-    permission: 'servicios.gestionar',
-    featureKey: 'promotions',
-  },
-  /*
-   * Aparte de "Campañas", que son descuentos. Una difusión es un mensaje que
-   * SALE hacia las clientas y se paga por cada uno; un descuento es una regla
-   * de precio. Meterlas en la misma pantalla haría que mandar mensajes
-   * pareciera tan inocuo como cambiar un precio.
-   */
-  {
-    label: 'Difusiones',
-    icon: 'pi pi-send',
-    routeName: 'broadcasts',
-    permission: 'servicios.gestionar',
-    featureKey: 'promotions',
-  },
-  {
-    label: 'Fidelización',
-    icon: 'pi pi-star',
-    routeName: 'loyalty',
-    permission: 'servicios.gestionar',
-    featureKey: 'loyalty',
-  },
-  {
-    label: 'Enséñale al bot',
-    icon: 'pi pi-comments',
-    routeName: 'bot-knowledge',
-    permission: 'ia.conocimiento',
-  },
-  {
-    label: 'Medios de pago',
-    icon: 'pi pi-credit-card',
-    routeName: 'payment-methods',
-    permission: 'negocio.configurar',
-  },
-  {
-    label: 'Permisos',
-    icon: 'pi pi-shield',
-    routeName: 'permissions',
-    permission: 'permisos.gestionar',
-    featureKey: 'permissions_management',
-  },
-  {
-    label: 'Pagos al equipo',
-    icon: 'pi pi-percentage',
-    routeName: 'compensation',
-    permission: 'nomina.gestionar',
-    featureKey: 'payroll',
+    label: 'Configuración',
+    icon: 'pi pi-cog',
+    tabs: [
+      {
+        label: 'Mi página',
+        routeName: 'public-page',
+        permission: 'negocio.configurar',
+        featureKey: 'online_booking',
+      },
+      { label: 'Sedes', routeName: 'locations', permission: 'negocio.configurar' },
+      { label: 'Medios de pago', routeName: 'payment-methods', permission: 'negocio.configurar' },
+    ],
   },
 ]
 
+function isGroup(item: Entry | Group): item is Group {
+  return 'tabs' in item
+}
+
 export function useNavItems() {
   const auth = useAuthStore()
+  const route = useRoute()
+
+  function allowed(entry: Entry): boolean {
+    if (entry.onlyStaff && !auth.user?.resource_id) return false
+    if (entry.permission && !auth.can(entry.permission)) return false
+    if (entry.featureKey && !auth.hasFeature(entry.featureKey)) return false
+    return true
+  }
 
   const navItems = computed<NavItem[]>(() =>
-    ITEMS.filter((item) => {
-      if (item.permission && !auth.can(item.permission)) {
-        return false
+    MENU.flatMap((item): NavItem[] => {
+      if (!isGroup(item)) {
+        return allowed(item)
+          ? [
+              {
+                label: item.label,
+                icon: item.icon ?? 'pi pi-circle',
+                routeName: item.routeName,
+                routeNames: [item.routeName],
+                badgeKeys: item.badgeKey ? [item.badgeKey] : [],
+              },
+            ]
+          : []
       }
 
-      if (item.featureKey && !auth.hasFeature(item.featureKey)) {
-        return false
-      }
+      const tabs = item.tabs.filter(allowed)
 
-      return true
-    }).map(({ label, icon, routeName, featureKey }) => ({ label, icon, routeName, featureKey })),
+      if (!tabs.length) return []
+
+      return [
+        {
+          label: item.label,
+          icon: item.icon,
+          // La entrada lleva a la primera pestaña que esta persona puede ver.
+          routeName: tabs[0].routeName,
+          routeNames: tabs.map((t) => t.routeName),
+          badgeKeys: tabs.flatMap((t) => (t.badgeKey ? [t.badgeKey] : [])),
+          tabs: tabs.map((t) => ({ label: t.label, routeName: t.routeName, badgeKey: t.badgeKey })),
+        },
+      ]
+    }),
   )
 
-  return { navItems }
+  /** El grupo de la pantalla abierta, si tiene más de una pestaña: sus pestañas van arriba. */
+  const currentTabs = computed<NavTab[]>(() => {
+    const grupo = navItems.value.find((i) => i.routeNames.includes(String(route.name)))
+    return grupo?.tabs && grupo.tabs.length > 1 ? grupo.tabs : []
+  })
+
+  function isActive(item: NavItem): boolean {
+    return item.routeNames.includes(String(route.name))
+  }
+
+  return { navItems, currentTabs, isActive }
 }

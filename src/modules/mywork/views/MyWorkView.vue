@@ -16,7 +16,7 @@ import { toLocalDateIso } from '@/utils/toLocalDateIso'
 
 import MyRatingsCard from '../components/MyRatingsCard.vue'
 import WalkInModal from '../components/WalkInModal.vue'
-import { useMyWork, type MyPayment } from '../composables/useMyWork'
+import { useMyWork } from '../composables/useMyWork'
 
 const auth = useAuthStore()
 const { notify } = useSystemAlert()
@@ -105,11 +105,6 @@ function diaLegible(iso: string | null, conMes = true): string {
     day: 'numeric',
     ...(conMes ? { month: 'long' } : {}),
   })
-}
-
-/** "1 de agosto al 31 de agosto", que es como ella piensa el período. */
-function periodo(pago: MyPayment): string {
-  return `${diaLegible(pago.period_start)} al ${diaLegible(pago.period_end)}`
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -274,58 +269,6 @@ const STATUS_LABELS: Record<string, string> = {
           </div>
         </article>
       </div>
-
-      <!-- Lo que ya le pagaron. En la app vieja era una pantalla suya y es de
-           las que más se miran: sin esto, "¿cuánto me pagaron el mes pasado?"
-           vuelve a ser una pregunta para el administrador. -->
-      <template v-if="data.payments.length">
-        <h2 class="mb-3 mt-8 text-sm font-medium uppercase tracking-wide text-slate-500">
-          Mis pagos
-        </h2>
-
-        <div class="flex flex-col gap-2">
-          <article
-            v-for="pago in data.payments"
-            :key="pago.id"
-            class="rounded-lg border border-slate-200 bg-white px-4 py-3"
-          >
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p class="font-medium text-slate-800">{{ periodo(pago) }}</p>
-                <p class="text-xs text-slate-500">
-                  Pagado el {{ diaLegible(pago.paid_at) }} · {{ pago.services_count }} servicio(s)
-                </p>
-              </div>
-              <span class="text-lg font-semibold tabular-nums text-slate-800">
-                {{ money(pago.net_total) }}
-              </span>
-            </div>
-
-            <!-- El desglose, no sólo el neto: el descuento que no se entiende
-                 es el que termina en una discusión el día de pago. -->
-            <dl class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-              <div v-if="pago.commission_total">
-                <dt class="inline">Comisión:</dt>
-                <dd class="inline tabular-nums">{{ money(pago.commission_total) }}</dd>
-              </div>
-              <div v-if="pago.base_total">
-                <dt class="inline">Base:</dt>
-                <dd class="inline tabular-nums">{{ money(pago.base_total) }}</dd>
-              </div>
-              <div v-if="pago.bonus_total">
-                <dt class="inline">Premios:</dt>
-                <dd class="inline tabular-nums text-emerald-700">+{{ money(pago.bonus_total) }}</dd>
-              </div>
-              <div v-if="pago.deduction_total">
-                <dt class="inline">Descuentos:</dt>
-                <dd class="inline tabular-nums text-red-700">−{{ money(pago.deduction_total) }}</dd>
-              </div>
-            </dl>
-
-            <p v-if="pago.notes" class="mt-1 text-xs text-slate-500">{{ pago.notes }}</p>
-          </article>
-        </div>
-      </template>
     </template>
 
     <WalkInModal

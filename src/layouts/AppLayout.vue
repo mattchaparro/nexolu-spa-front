@@ -5,13 +5,18 @@ import { useRoute, useRouter } from 'vue-router'
 import { useNavBadges } from '@/composables/useNavBadges'
 import { useNavItems } from '@/composables/useNavItems'
 import { useAuthStore } from '@/stores/auth.store'
+import type { NavItem } from '@/types/navigation'
 
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
-const { navItems } = useNavItems()
+const { navItems, currentTabs, isActive } = useNavItems()
 const { badge } = useNavBadges()
 
+/** El contador de una entrada: la suma de los de sus pestañas. */
+function badgeOf(item: NavItem): number {
+  return item.badgeKeys.reduce((sum, key) => sum + badge(key), 0)
+}
 
 const returning = ref(false)
 const drawerOpen = ref(false)
@@ -26,10 +31,15 @@ const bottomItems = computed(() => navItems.value.slice(0, 4))
 const drawerItems = computed(() => navItems.value.slice(4))
 
 /** Si algo de lo que quedó en el cajón está esperando respuesta. */
-const pendienteEnElCajon = computed(() => drawerItems.value.some((i) => badge(i.badgeKey) > 0))
+const pendienteEnElCajon = computed(() => drawerItems.value.some((i) => badgeOf(i) > 0))
 
 // Navegar cierra el cajón. Sin esto queda abierto encima de la pantalla nueva.
-watch(() => route.fullPath, () => { drawerOpen.value = false })
+watch(
+  () => route.fullPath,
+  () => {
+    drawerOpen.value = false
+  },
+)
 
 async function signOut(): Promise<void> {
   await auth.logout()
@@ -99,8 +109,8 @@ async function backToPlatform(): Promise<void> {
             v-for="item in navItems"
             :key="item.label"
             :to="{ name: item.routeName }"
-            class="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-slate-100"
-            active-class="bg-indigo-50 font-medium text-indigo-700"
+            class="flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-slate-100"
+            :class="isActive(item) ? 'bg-indigo-50 font-medium text-indigo-700' : 'text-slate-600'"
           >
             <i :class="item.icon" />
             <span class="flex-1">{{ item.label }}</span>
@@ -108,10 +118,10 @@ async function backToPlatform(): Promise<void> {
             <!-- El numerito solo aparece cuando hay algo. Un "0" permanente
                  se vuelve parte del decorado y deja de avisar nada. -->
             <span
-              v-if="badge(item.badgeKey)"
+              v-if="badgeOf(item)"
               class="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white"
             >
-              {{ badge(item.badgeKey) }}
+              {{ badgeOf(item) }}
             </span>
           </RouterLink>
         </nav>
@@ -128,7 +138,12 @@ async function backToPlatform(): Promise<void> {
           >
             Volver a plataforma
           </button>
-          <button v-else type="button" class="mt-3 text-xs text-slate-500 underline" @click="signOut">
+          <button
+            v-else
+            type="button"
+            class="mt-3 text-xs text-slate-500 underline"
+            @click="signOut"
+          >
             Cerrar sesión
           </button>
         </div>
@@ -137,6 +152,34 @@ async function backToPlatform(): Promise<void> {
       <!-- El padding de abajo deja respirar la última fila por encima de la
            barra fija; sin él, el botón de guardar queda debajo del menú. -->
       <main class="min-w-0 flex-1 overflow-x-auto pb-20 md:pb-0">
+        <!-- Las pestañas del grupo (WhatsApp → Conversaciones, Difusiones...).
+             Una sola barra para todas las pantallas del grupo, en vez de una
+             entrada del menú por cada una. Con scroll horizontal en el
+             teléfono: seis pestañas no caben en 375px. -->
+        <nav
+          v-if="currentTabs.length"
+          class="sticky top-0 z-20 flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4 md:px-8"
+        >
+          <RouterLink
+            v-for="tab in currentTabs"
+            :key="tab.routeName"
+            :to="{ name: tab.routeName }"
+            class="relative shrink-0 whitespace-nowrap border-b-2 px-3 py-3 text-sm"
+            :class="
+              route.name === tab.routeName
+                ? 'border-indigo-600 font-medium text-indigo-700'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            "
+          >
+            {{ tab.label }}
+            <span
+              v-if="badge(tab.badgeKey)"
+              class="ml-1 rounded-full bg-emerald-500 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white"
+            >
+              {{ badge(tab.badgeKey) }}
+            </span>
+          </RouterLink>
+        </nav>
         <slot />
       </main>
     </div>
@@ -149,7 +192,9 @@ async function backToPlatform(): Promise<void> {
         <nav
           class="absolute inset-x-0 bottom-0 max-h-[75vh] overflow-y-auto rounded-t-2xl bg-white pb-20"
         >
-          <div class="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4">
+          <div
+            class="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4"
+          >
             <span class="font-semibold text-slate-800">Menú</span>
             <button type="button" class="text-slate-400" @click="drawerOpen = false">
               <i class="pi pi-times" />
@@ -160,16 +205,16 @@ async function backToPlatform(): Promise<void> {
             v-for="item in drawerItems"
             :key="item.label"
             :to="{ name: item.routeName }"
-            class="flex items-center gap-3 border-b border-slate-50 px-5 py-3.5 text-slate-700"
-            active-class="bg-indigo-50 font-medium text-indigo-700"
+            class="flex items-center gap-3 border-b border-slate-50 px-5 py-3.5"
+            :class="isActive(item) ? 'bg-indigo-50 font-medium text-indigo-700' : 'text-slate-700'"
           >
             <i :class="item.icon" class="w-5 text-slate-400" />
             <span class="flex-1">{{ item.label }}</span>
             <span
-              v-if="badge(item.badgeKey)"
+              v-if="badgeOf(item)"
               class="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[11px] font-medium leading-none text-white"
             >
-              {{ badge(item.badgeKey) }}
+              {{ badgeOf(item) }}
             </span>
           </RouterLink>
 
@@ -185,7 +230,12 @@ async function backToPlatform(): Promise<void> {
             >
               Volver a plataforma
             </button>
-            <button v-else type="button" class="mt-3 text-sm text-slate-500 underline" @click="signOut">
+            <button
+              v-else
+              type="button"
+              class="mt-3 text-sm text-slate-500 underline"
+              @click="signOut"
+            >
               Cerrar sesión
             </button>
           </div>
@@ -204,8 +254,8 @@ async function backToPlatform(): Promise<void> {
         v-for="item in bottomItems"
         :key="item.label"
         :to="{ name: item.routeName }"
-        class="flex min-w-0 flex-1 flex-col items-center gap-0.5 py-2 text-[11px] text-slate-500"
-        active-class="text-indigo-600"
+        class="flex min-w-0 flex-1 flex-col items-center gap-0.5 py-2 text-[11px]"
+        :class="isActive(item) ? 'text-indigo-600' : 'text-slate-500'"
       >
         <!-- En la barra inferior va un PUNTO y no el numero: el icono mide
              lo que mide y un "12" encima lo tapa. Lo que hace falta saber
@@ -213,7 +263,7 @@ async function backToPlatform(): Promise<void> {
         <span class="relative">
           <i :class="item.icon" class="text-lg" />
           <span
-            v-if="badge(item.badgeKey)"
+            v-if="badgeOf(item)"
             class="absolute -right-1.5 -top-0.5 h-2 w-2 rounded-full bg-emerald-500"
           />
         </span>

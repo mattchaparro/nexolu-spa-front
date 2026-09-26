@@ -321,7 +321,10 @@ async function submit(): Promise<void> {
         <p v-else-if="selected" class="mt-1 text-xs text-emerald-700">
           Cliente existente · {{ selected.phone ?? 'sin teléfono' }}
         </p>
-        <p v-else-if="!puedeBuscarPorNombre && term.trim().length > 1" class="mt-1 text-xs text-slate-500">
+        <p
+          v-else-if="!puedeBuscarPorNombre && term.trim().length > 1"
+          class="mt-1 text-xs text-slate-500"
+        >
           Escribe su teléfono completo abajo y la buscamos; si no está, se guarda como nueva.
         </p>
         <p v-else-if="term.trim().length > 1" class="mt-1 text-xs text-slate-500">
