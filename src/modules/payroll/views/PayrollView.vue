@@ -388,7 +388,11 @@ const previewMessage = computed(() =>
         <NxButton variant="secondary" :disabled="settling" @click="confirming = false">
           Cancelar
         </NxButton>
-        <NxButton :loading="settling" @click="confirm">Confirmar pago</NxButton>
+        <!-- Sin medio no se paga: el servidor lo exige, porque sin él el
+             pago entero se restaba del efectivo del día. -->
+        <NxButton :loading="settling" :disabled="paymentMethodId === null" @click="confirm">
+          Confirmar pago
+        </NxButton>
       </template>
     </NxModal>
   </section>
