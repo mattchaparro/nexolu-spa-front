@@ -92,6 +92,51 @@ async function cancelAppointment(): Promise<void> {
 const auth = useAuthStore()
 const open = computed(() => props.appointment !== null)
 
+/*
+|------------------------------------------------------------------------------
+| Escribirle por WhatsApp
+|------------------------------------------------------------------------------
+| Abre Connect con el chat de esta clienta ya adentro (lo busca o lo crea si
+| nunca escribió). El pase es de un solo uso y vence en dos minutos: se pide en
+| el clic, y la pestaña se abre ANTES de esperar al servidor -- si se abriera
+| después, Safari la bloquearía como ventana emergente.
+*/
+const abriendoChat = ref(false)
+const errorChat = ref<string | null>(null)
+
+function soloDigitos(phone: string): string {
+  return phone.replace(/\D+/g, '')
+}
+
+/** 573154017414 → +57 315 401 7414, que es como se lee un celular. */
+function telefonoLegible(phone: string): string {
+  const d = soloDigitos(phone)
+  const m = d.match(/^57(\d{3})(\d{3})(\d{4})$/)
+  return m ? `+57 ${m[1]} ${m[2]} ${m[3]}` : `+${d}`
+}
+
+async function escribirPorWhatsApp(): Promise<void> {
+  if (!props.appointment?.client_phone) return
+
+  errorChat.value = null
+  abriendoChat.value = true
+  const tab = window.open('', '_blank')
+
+  try {
+    const { data } = await httpClient.post<{ url: string }>('/whatsapp/connect-link', {
+      phone: props.appointment.client_phone,
+      name: props.appointment.client_name ?? undefined,
+    })
+    if (tab) tab.location.href = data.url
+    else window.location.href = data.url
+  } catch {
+    tab?.close()
+    errorChat.value = 'El chat no está disponible en este momento. Intenta de nuevo en un rato.'
+  } finally {
+    abriendoChat.value = false
+  }
+}
+
 const paymentMethodId = ref<number | null>(null)
 const discount = ref('')
 const discountReason = ref('')
@@ -462,6 +507,29 @@ async function submit(): Promise<void> {
             {{ CANALES[appointment.source] }}
           </span>
         </p>
+        <!-- Su WhatsApp y el atajo a su chat en Connect. Solo con `clientes.ver`:
+             el teléfono es parte de la base de clientas, no de la cita. -->
+        <div
+          v-if="auth.can('clientes.ver') && appointment.client_phone"
+          class="mt-1 flex flex-wrap items-center justify-between gap-2 pb-1"
+        >
+          <a
+            :href="`tel:+${soloDigitos(appointment.client_phone)}`"
+            class="tabular-nums text-slate-600"
+          >
+            <i class="pi pi-phone mr-1 text-xs" />{{ telefonoLegible(appointment.client_phone) }}
+          </a>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+            :disabled="abriendoChat"
+            @click="escribirPorWhatsApp"
+          >
+            <i class="pi pi-whatsapp" />
+            {{ abriendoChat ? 'Abriendo…' : 'Escribir por WhatsApp' }}
+          </button>
+        </div>
+        <p v-if="errorChat" class="text-xs text-red-600">{{ errorChat }}</p>
         <p
           v-for="item in appointment.items"
           :key="item.id"
