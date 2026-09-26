@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 
 import { usePaymentMethods } from '@/composables/usePaymentMethods'
+import { httpClient } from '@/services/http/client'
 import { useSystemAlert } from '@/composables/useSystemAlert'
 import { useAuthStore } from '@/stores/auth.store'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
@@ -147,7 +148,35 @@ const discountValue = computed(() => {
 
   return Math.round((subtotal.value * discountMode.value) / 100)
 })
-const total = computed(() => Math.max(0, subtotal.value - discountValue.value))
+/*
+|------------------------------------------------------------------------------
+| Lo que se va a cobrar, dicho por el servidor
+|------------------------------------------------------------------------------
+| El combo, la campaña y el premio de sellos los calcula el servidor al cobrar.
+| La pantalla no los conocía: decía «Cobrar $100.000», la clienta pagaba eso y
+| la venta quedaba en 85.000. Ahora se pregunta antes, con lo mismo que se va a
+| mandar, y el botón dice lo que de verdad queda guardado.
+*/
+interface Cotizacion {
+  subtotal: number
+  auto_discount: { amount: number; reason: string | null } | null
+  discount: number
+  discount_reason: string | null
+  total: number
+  deposit_paid: number
+  to_charge: number
+}
+
+const cotizacion = ref<Cotizacion | null>(null)
+let pedidoCotizacion = 0
+
+const total = computed(() =>
+  cotizacion.value !== null
+    ? cotizacion.value.total
+    : Math.max(0, subtotal.value - discountValue.value),
+)
+/** El descuento que de verdad se aplica: el elegido, o el del combo/campaña/premio. */
+const descuentoAplicado = computed(() => cotizacion.value?.discount ?? discountValue.value)
 
 /*
 |------------------------------------------------------------------------------
@@ -243,17 +272,13 @@ const { data: card } = useClientLoyalty(
 const premiosDisponibles = computed(() => card.value?.rewards ?? [])
 const premioElegido = ref<number | null>(null)
 
-const premio = computed(
-  () => premiosDisponibles.value.find((r) => r.id === premioElegido.value) ?? null,
-)
-
 /** Lo que cada persona se lleva, con el descuento ya repartido. */
 const commissions = computed(() => {
   const items = props.appointment?.items ?? []
 
   return items.map((item) => {
     const cobrado = precioDe(item)
-    const share = subtotal.value > 0 ? (cobrado / subtotal.value) * discountValue.value : 0
+    const share = subtotal.value > 0 ? (cobrado / subtotal.value) * descuentoAplicado.value : 0
 
     return {
       name: item.resource_name,
@@ -298,6 +323,61 @@ function money(value: number): string {
     maximumFractionDigits: 0,
   }).format(value)
 }
+
+async function cotizar(): Promise<void> {
+  if (!props.appointment) {
+    return
+  }
+
+  const pedido = ++pedidoCotizacion
+
+  try {
+    const { data } = await httpClient.post<Cotizacion>(
+      `/appointments/${props.appointment.id}/checkout/quote`,
+      {
+        discount_amount: discountMode.value === 0 ? undefined : discountValue.value,
+        item_prices: cambiados.value.length
+          ? Object.fromEntries(cambiados.value.map((i) => [i.id, precioDe(i)]))
+          : undefined,
+        loyalty_reward_id: premioElegido.value ?? undefined,
+      },
+    )
+
+    // Solo la respuesta a la última pregunta: tocar 10 % y luego 15 % rápido
+    // no puede dejar en pantalla la cuenta del 10 %.
+    if (pedido === pedidoCotizacion) {
+      cotizacion.value = data
+    }
+  } catch {
+    // Sin cotización se muestra la cuenta local, como antes.
+    if (pedido === pedidoCotizacion) {
+      cotizacion.value = null
+    }
+  }
+}
+
+let esperaCotizacion: ReturnType<typeof setTimeout> | undefined
+
+watch(
+  () => [
+    open.value,
+    props.appointment?.id,
+    discountMode.value,
+    discount.value,
+    premioElegido.value,
+    JSON.stringify(preciosEscritos.value),
+  ],
+  () => {
+    if (!open.value) {
+      cotizacion.value = null
+      return
+    }
+
+    clearTimeout(esperaCotizacion)
+    esperaCotizacion = setTimeout(() => void cotizar(), 250)
+  },
+  { immediate: true },
+)
 
 const canSubmit = computed(
   () => paymentMethodId.value !== null && discountValue.value <= subtotal.value && !isPending.value,
@@ -601,15 +681,23 @@ async function submit(): Promise<void> {
         <p class="flex justify-between text-slate-600">
           <span>Subtotal</span><span class="tabular-nums">{{ money(subtotal) }}</span>
         </p>
-        <!-- El premio no se resta acá: el servidor lo calcula y lo suma al
-             descuento. Duplicar esa aritmética en el front es garantizar que
-             un día las dos copias digan cosas distintas. -->
-        <p v-if="premio" class="flex justify-between text-amber-700">
-          <span>Premio · {{ premio.label }}</span>
-          <span class="tabular-nums">se aplica al cobrar</span>
+        <!-- El descuento que de verdad se aplica, con su motivo: el elegido,
+             el del combo o la campaña, y el premio. Lo calcula el servidor
+             (ver `cotizar`); duplicar esa aritmética aquí es garantizar que un
+             día las dos copias digan cosas distintas. -->
+        <p v-if="descuentoAplicado > 0" class="flex justify-between gap-3 text-amber-700">
+          <span class="min-w-0 truncate">
+            Descuento<template v-if="cotizacion?.discount_reason">
+              · {{ cotizacion.discount_reason }}</template
+            >
+          </span>
+          <span class="tabular-nums">−{{ money(descuentoAplicado) }}</span>
         </p>
-        <p v-if="discountValue > 0" class="flex justify-between text-amber-700">
-          <span>Descuento</span><span class="tabular-nums">−{{ money(discountValue) }}</span>
+        <!-- Elegir un descuento a mano reemplaza el del combo: no se suman. -->
+        <p v-if="cotizacion?.auto_discount && discountMode !== 0" class="text-xs text-slate-500">
+          Reemplaza el descuento de «{{ cotizacion.auto_discount.reason }}» (−{{
+            money(cotizacion.auto_discount.amount)
+          }}).
         </p>
         <p
           class="mt-1 flex justify-between border-t border-slate-100 pt-1 text-slate-900"

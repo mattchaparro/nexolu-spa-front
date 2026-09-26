@@ -72,6 +72,30 @@ export interface DailySummary {
     pending_checkout: number
   }
   by_resource: Array<{ name: string; appointments: number; charged: number; commission: number }>
+  /** Cada servicio cobrado ese día, uno por uno. */
+  lines: DailySummaryLine[]
+}
+
+export interface DailySummaryLine {
+  appointment_id: number
+  item_id: number
+  /** Hora del cobro, en la zona del negocio (HH:mm). */
+  charged_at: string
+  client_name: string | null
+  service_id: number
+  service_name: string
+  resource_name: string
+  /** El de la carta. */
+  price: number
+  /** Lo cobrado de verdad, con el descuento repartido. */
+  charged: number
+  payment_method_id: number | null
+  payment_method: string
+  commission: number
+  discount_reason: string | null
+  items_in_appointment: number
+  /** Ya pagada en una nómina: no se corrige desde aquí. */
+  settled: boolean
 }
 
 export interface ExpenseRow {
@@ -197,6 +221,65 @@ export function useUndoClosing() {
  * cierre: no se cuadra contra un cajón, responde "cómo nos fue hoy", y para el
  * dueño de dos locales esa pregunta es de los dos.
  */
+/*
+|------------------------------------------------------------------------------
+| Corregir lo cobrado
+|------------------------------------------------------------------------------
+| Desde el Resumen del día: cambiar el servicio, el valor o el medio de algo ya
+| cobrado, deshacer el cobro, o eliminarlo si se subió de más. Nada de esto le
+| avisa a nadie: es corregir el sistema.
+*/
+
+function invalidarCobros(queryClient: ReturnType<typeof useQueryClient>): void {
+  invalidateCash(queryClient)
+  queryClient.invalidateQueries({ queryKey: ['agenda'] })
+  queryClient.invalidateQueries({ queryKey: ['appointments'] })
+  queryClient.invalidateQueries({ queryKey: ['sales-report'] })
+}
+
+export function useCorrectCheckout() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (input: {
+      appointmentId: number
+      payment_method_id: number
+      lines: Array<{ id: number; service_id: number; charged: number }>
+    }) =>
+      (
+        await httpClient.put(`/appointments/${input.appointmentId}/checkout`, {
+          payment_method_id: input.payment_method_id,
+          lines: input.lines,
+        })
+      ).data,
+    onSuccess: () => invalidarCobros(queryClient),
+  })
+}
+
+export function useUndoCheckout() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (appointmentId: number) =>
+      (await httpClient.delete(`/appointments/${appointmentId}/checkout`)).data,
+    onSuccess: () => invalidarCobros(queryClient),
+  })
+}
+
+export function useDeleteCharged() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ appointmentId, reason }: { appointmentId: number; reason?: string }) =>
+      (
+        await httpClient.delete(`/appointments/${appointmentId}`, {
+          data: { undo_checkout: true, reason },
+        })
+      ).data,
+    onSuccess: () => invalidarCobros(queryClient),
+  })
+}
+
 export function useDailySummary(date: Ref<string>, locationId?: Ref<number | null>) {
   return useQuery({
     queryKey: ['daily-summary', date, locationId ?? null],
