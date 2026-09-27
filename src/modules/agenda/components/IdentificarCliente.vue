@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 
 import {
+  searchClients,
   useAttachClient,
   useClientLookup,
   useQuickClient,
   type ClientIdentity,
+  type ClientOption,
 } from '../composables/useAppointments'
 
 /*
@@ -25,9 +27,10 @@ import {
 | Va acá y no en la ficha de la clienta porque este es el único momento en que
 | alguien del local la tiene enfrente y le puede preguntar el número.
 |
-| NO ABRE LA BASE. Se busca por teléfono completo, de a una, y la respuesta es
-| un nombre de pila con la inicial. Quien atiende puede confirmar "¿Laura B.?"
-| y no puede recorrer ni copiar la lista.
+| Por NOMBRE o por TELÉFONO, en un solo campo (27-sep: las manicuristas buscan
+| por los dos). Por nombre salen hasta 20 con el teléfono enmascarado
+| (··· 2233): alcanza para distinguir a dos Carolinas, no para llevarse la
+| lista. Un teléfono completo se pregunta de a una, como antes.
 */
 
 const props = defineProps<{ appointmentId: number }>()
@@ -37,8 +40,11 @@ const { mutateAsync: buscar, isPending: buscando } = useClientLookup()
 const { mutateAsync: crear, isPending: creando } = useQuickClient()
 const { mutateAsync: asociar, isPending: asociando } = useAttachClient()
 
+/** Lo que se escribe: un nombre o un WhatsApp. */
+const termino = ref('')
 const telefono = ref('')
 const nombre = ref('')
+const resultados = ref<ClientOption[]>([])
 const error = ref<string | null>(null)
 
 /** `null` = todavía no se buscó. */
@@ -46,15 +52,48 @@ const encontrada = ref<ClientIdentity | null>(null)
 const noExiste = ref(false)
 
 const ocupado = computed(() => buscando.value || creando.value || asociando.value)
-const puedeBuscar = computed(() => telefono.value.replace(/\D/g, '').length >= 7)
+/** Si lo escrito es un número (7+ dígitos y nada más que dígitos, espacios o +). */
+const esTelefono = computed(
+  () => /^[\d\s+()-]+$/.test(termino.value) && termino.value.replace(/\D/g, '').length >= 7,
+)
+const puedeBuscar = computed(() => esTelefono.value)
+
+let espera: ReturnType<typeof setTimeout> | undefined
+
+// Por nombre, mientras escribe: la lista aparece sola.
+watch(termino, (valor) => {
+  clearTimeout(espera)
+  resultados.value = []
+
+  if (esTelefono.value || valor.trim().length < 2) return
+
+  espera = setTimeout(async () => {
+    try {
+      resultados.value = await searchClients(valor)
+    } catch {
+      resultados.value = []
+    }
+  }, 250)
+})
+
+/** Crear la ficha cuando no aparece: con lo que ya se escribió prellenado. */
+function crearNueva(): void {
+  resultados.value = []
+  encontrada.value = null
+  noExiste.value = true
+  if (esTelefono.value) telefono.value = termino.value.trim()
+  else nombre.value = termino.value.trim()
+}
 
 async function buscarla(): Promise<void> {
   error.value = null
   encontrada.value = null
   noExiste.value = false
 
+  telefono.value = termino.value.trim()
+
   try {
-    const r = await buscar(telefono.value.trim())
+    const r = await buscar(telefono.value)
 
     if (r.found && r.client) {
       encontrada.value = r.client
@@ -111,16 +150,17 @@ function alEscribir(): void {
 
     <div class="mt-2 flex gap-2">
       <input
-        v-model="telefono"
-        type="tel"
-        inputmode="tel"
-        placeholder="Su WhatsApp"
+        v-model="termino"
+        type="text"
+        autocomplete="off"
+        placeholder="Nombre o WhatsApp"
         class="min-h-11 min-w-0 flex-1 rounded-lg border border-amber-300 px-3 text-base text-slate-900"
         :disabled="ocupado"
         @input="alEscribir"
         @keydown.enter.prevent="puedeBuscar && buscarla()"
       />
       <button
+        v-if="esTelefono"
         type="button"
         class="min-h-11 shrink-0 rounded-lg bg-amber-600 px-4 text-sm font-medium text-white disabled:opacity-50"
         :disabled="!puedeBuscar || ocupado"
@@ -129,6 +169,36 @@ function alEscribir(): void {
         {{ buscando ? 'Buscando…' : 'Buscar' }}
       </button>
     </div>
+
+    <!-- Por nombre: las que coinciden, con el teléfono enmascarado si no se
+         tiene permiso de ver la base. Tocar una la asocia. -->
+    <ul
+      v-if="resultados.length"
+      class="mt-2 divide-y divide-amber-100 overflow-hidden rounded-lg border border-amber-200 bg-white"
+    >
+      <li v-for="c in resultados" :key="c.id">
+        <button
+          type="button"
+          class="flex min-h-11 w-full items-center justify-between gap-2 px-3 text-left text-sm text-slate-800 hover:bg-amber-50 disabled:opacity-50"
+          :disabled="ocupado"
+          @click="usar({ id: c.id, display_name: c.full_name })"
+        >
+          <span class="min-w-0 truncate">{{ c.full_name }}</span>
+          <span v-if="c.phone" class="shrink-0 text-xs tabular-nums text-slate-500">{{
+            c.phone
+          }}</span>
+        </button>
+      </li>
+    </ul>
+    <button
+      v-if="termino.trim().length > 1 && !encontrada && !noExiste"
+      type="button"
+      class="mt-2 text-xs text-amber-800 underline"
+      :disabled="ocupado"
+      @click="crearNueva"
+    >
+      No aparece: crear su ficha
+    </button>
 
     <!-- Ya estaba registrada. Se confirma con el nombre y se asocia. -->
     <div v-if="encontrada" class="mt-2 flex items-center gap-2">
@@ -148,7 +218,15 @@ function alEscribir(): void {
 
     <!-- No estaba. Se crea con lo mínimo y queda asociada de una. -->
     <div v-else-if="noExiste" class="mt-2">
-      <p class="text-sm text-amber-900">No está registrada. ¿Cómo se llama?</p>
+      <p class="text-sm text-amber-900">No está registrada. Créale la ficha:</p>
+      <input
+        v-model="telefono"
+        type="tel"
+        inputmode="tel"
+        placeholder="Su WhatsApp"
+        class="mt-1 min-h-11 w-full rounded-lg border border-amber-300 px-3 text-base text-slate-900"
+        :disabled="ocupado"
+      />
       <div class="mt-1 flex gap-2">
         <input
           v-model="nombre"

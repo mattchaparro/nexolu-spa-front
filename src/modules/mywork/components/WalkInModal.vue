@@ -60,14 +60,14 @@ const auth = useAuthStore()
 const { mutateAsync: buscarPorTelefono } = useClientLookup()
 
 /*
- * Buscar por NOMBRE es abrir la base, y quien atiende no tiene ese permiso
- * (`clientes.ver`): la API le responde 403. Antes se le pedía igual, el
- * desplegable quedaba vacío sin decir por qué, y le creaba ficha nueva a una
- * clienta que ya existía -- con su historial y sus sellos en la ficha vieja.
- *
- * Ella identifica como en el cobro: por TELÉFONO COMPLETO, de a una.
+ * Buscar por nombre o teléfono. Quien atiende (`clientes.identificar`, sin
+ * `clientes.ver`) también puede -- decisión de Alejandro, 27-sep --, y el
+ * servidor le devuelve el teléfono enmascarado (··· 2233): elige a la clienta
+ * sin llevarse el número. Sin ninguno de los dos, queda el teléfono completo.
  */
-const puedeBuscarPorNombre = computed(() => auth.can('clientes.ver'))
+const puedeBuscarPorNombre = computed(
+  () => auth.can('clientes.ver') || auth.can('clientes.identificar'),
+)
 
 const staff = computed(() => resources.value?.filter((r) => r.type === 'staff') ?? [])
 
