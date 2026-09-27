@@ -82,6 +82,21 @@ const price = ref('')
 const chargeNow = ref(true)
 const error = ref<string | null>(null)
 
+/*
+ * El descuento como en «Cobrar»: se elige, no se escribe. 0 = sin descuento,
+ * un número = ese porcentaje del precio, 'otro' = la cifra escrita.
+ */
+const DESCUENTOS = [10, 15, 20] as const
+const discountMode = ref<number | 'otro'>(0)
+const discount = ref('')
+const precioNumero = computed(() => Math.max(0, Number(price.value) || 0))
+const discountValue = computed(() =>
+  discountMode.value === 'otro'
+    ? Math.min(precioNumero.value, Math.max(0, Number(discount.value) || 0))
+    : Math.round((precioNumero.value * discountMode.value) / 100),
+)
+const aCobrar = computed(() => Math.max(0, precioNumero.value - discountValue.value))
+
 const fecha = ref(ultimaFecha.value)
 const hora = ref('')
 
@@ -188,6 +203,8 @@ watch(
     phone.value = ''
     methodId.value = methods.value?.[0]?.id ?? null
     price.value = ''
+    discountMode.value = 0
+    discount.value = ''
     chargeNow.value = true
     silent.value = false
     error.value = null
@@ -195,6 +212,18 @@ watch(
     hora.value = fecha.value === hoy ? horaSugerida() : hora.value || '10:00'
   },
 )
+
+/*
+ * Si la lista de servicios o de medios llega DESPUÉS de abrir (la primera vez
+ * que se abre en la sesión), se elige cuando llegue: antes el servicio quedaba
+ * vacío y el precio en cero, y había que adivinar por qué.
+ */
+watch(services, (lista) => {
+  if (props.open && serviceId.value === null && lista?.length) serviceId.value = lista[0].id
+})
+watch(methods, (lista) => {
+  if (props.open && methodId.value === null && lista?.length) methodId.value = lista[0].id
+})
 
 /*
  * Nunca hacia adelante. Esto registra lo que YA se hizo -- un servicio con
@@ -217,11 +246,15 @@ function choose(client: ClientOption): void {
   results.value = []
 }
 
+/*
+ * El cliente es opcional: a veces la persona no da sus datos, y el servicio
+ * igual se hizo y se cobra. Sin nombre queda como «Sin nombre».
+ */
 const canSubmit = computed(
   () =>
     serviceId.value !== null &&
-    term.value.trim().length > 1 &&
     (!mustPickResource.value || resourceId.value !== null) &&
+    (!chargeNow.value || methodId.value !== null) &&
     !isPending.value,
 )
 
@@ -233,7 +266,7 @@ async function submit(): Promise<void> {
       service_id: serviceId.value!,
       resource_id: resourceId.value,
       client_id: selected.value?.id ?? null,
-      client_name: selected.value?.full_name ?? term.value.trim(),
+      client_name: selected.value?.full_name ?? (term.value.trim() || undefined),
       client_phone: selected.value ? undefined : phone.value.trim() || undefined,
       // El servidor la interpreta en la zona del negocio, no en la del
       // teléfono: la cita es a las 2 de la tarde en el local, pase lo que pase
@@ -241,6 +274,7 @@ async function submit(): Promise<void> {
       started_at: `${fecha.value}T${hora.value || '10:00'}`,
       payment_method_id: chargeNow.value ? methodId.value : null,
       final_price: chargeNow.value && price.value !== '' ? Number(price.value) : undefined,
+      discount_amount: chargeNow.value && discountValue.value > 0 ? discountValue.value : undefined,
       silent: silent.value || undefined,
     })
     // Se recuerda para el siguiente: ponerse al día son varios del mismo día.
@@ -298,7 +332,12 @@ async function submit(): Promise<void> {
       </p>
 
       <div class="relative">
-        <NxInput v-model="term" label="Cliente" :disabled="isPending" autocomplete="off" />
+        <NxInput
+          v-model="term"
+          label="Cliente (opcional)"
+          :disabled="isPending"
+          autocomplete="off"
+        />
 
         <ul
           v-if="results.length"
@@ -330,6 +369,9 @@ async function submit(): Promise<void> {
         <p v-else-if="term.trim().length > 1" class="mt-1 text-xs text-slate-500">
           Se guardará como cliente nuevo.
         </p>
+        <p v-else class="mt-1 text-xs text-slate-500">
+          Si no dio sus datos, déjalo vacío: queda como «Sin nombre».
+        </p>
       </div>
 
       <NxInput
@@ -345,17 +387,62 @@ async function submit(): Promise<void> {
         Cobrar ahora
       </label>
 
-      <div v-if="chargeNow" class="grid gap-3 sm:grid-cols-2">
-        <NxSelect
-          v-model="methodId"
-          :options="methods ?? []"
-          option-label="name"
-          option-value="id"
-          label="Método de pago"
-          :disabled="isPending"
-        />
-        <NxInput v-model="price" label="Precio cobrado" inputmode="numeric" :disabled="isPending" />
-      </div>
+      <!-- Igual que en «Cobrar»: medio en botones grandes y descuento por
+           porcentaje. Son las mismas manos cobrando, en otra pantalla. -->
+      <template v-if="chargeNow">
+        <div>
+          <p class="mb-1.5 text-sm font-medium text-slate-700">Medio de pago</p>
+          <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <button
+              v-for="m in methods ?? []"
+              :key="m.id"
+              type="button"
+              class="rounded-lg border px-3 py-2.5 text-sm font-medium transition"
+              :class="
+                methodId === m.id
+                  ? 'border-indigo-600 bg-indigo-600 text-white'
+                  : 'border-slate-200 text-slate-700 hover:border-indigo-300'
+              "
+              :disabled="isPending"
+              @click="methodId = m.id"
+            >
+              {{ m.name }}
+            </button>
+          </div>
+        </div>
+
+        <NxInput v-model="price" label="Precio" inputmode="numeric" :disabled="isPending" />
+
+        <div>
+          <p class="mb-1.5 text-sm font-medium text-slate-700">Descuento</p>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="opcion in [0, ...DESCUENTOS, 'otro' as const]"
+              :key="opcion"
+              type="button"
+              class="rounded-full border px-3 py-1.5 text-sm transition"
+              :class="
+                discountMode === opcion
+                  ? 'border-amber-500 bg-amber-500 font-medium text-white'
+                  : 'border-slate-200 text-slate-700 hover:border-amber-300'
+              "
+              :disabled="isPending"
+              @click="discountMode = opcion"
+            >
+              {{ opcion === 0 ? 'Sin descuento' : opcion === 'otro' ? 'Otro valor' : `${opcion}%` }}
+            </button>
+          </div>
+          <div v-if="discountMode === 'otro'" class="mt-2 w-40">
+            <NxInput v-model="discount" label="Valor" inputmode="numeric" :disabled="isPending" />
+          </div>
+        </div>
+
+        <p
+          class="flex justify-between rounded-md border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-900"
+        >
+          <span>A cobrar</span><span class="tabular-nums">{{ money(aCobrar) }}</span>
+        </p>
+      </template>
 
       <p v-else class="text-xs text-slate-500">
         Queda registrado sin cobrar. Se cobra después desde la agenda.

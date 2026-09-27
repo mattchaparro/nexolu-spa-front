@@ -29,6 +29,8 @@ export interface Service {
   price: number
   /** Quien presta el servicio. Sin esto no se puede filtrar por persona. */
   resource_ids?: number[]
+  /** Veces pedido en el último año: los selectores ponen primero los más pedidos. */
+  times_requested?: number
 }
 
 export interface Resource {
@@ -41,7 +43,16 @@ export interface Resource {
 export function useServices() {
   return useQuery({
     queryKey: ['services'],
-    queryFn: async () => (await httpClient.get<Service[]>('/services')).data,
+    /*
+     * Los más pedidos primero, en todos los selectores de servicio (agendar,
+     * sin cita, corregir un cobro...): buscar «Semi» entre 30 nombres en
+     * orden alfabético es lo que hacía lento agendar en el mostrador.
+     */
+    queryFn: async () =>
+      (await httpClient.get<Service[]>('/services')).data.sort(
+        (a, b) =>
+          (b.times_requested ?? 0) - (a.times_requested ?? 0) || a.name.localeCompare(b.name, 'es'),
+      ),
     // El catalogo cambia poco comparado con la agenda.
     staleTime: 5 * 60_000,
   })
