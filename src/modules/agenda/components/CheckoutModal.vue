@@ -2,11 +2,12 @@
 import { computed, ref, watch } from 'vue'
 
 import { usePaymentMethods } from '@/composables/usePaymentMethods'
+import { useServices } from '@/modules/agenda/composables/useAvailability'
 import { httpClient } from '@/services/http/client'
 import { useSystemAlert } from '@/composables/useSystemAlert'
 import { useAuthStore } from '@/stores/auth.store'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
-import { NxButton, NxInput, NxModal } from '@/ui'
+import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 
 import IdentificarCliente from './IdentificarCliente.vue'
 import LoyaltyCardPanel from './LoyaltyCardPanel.vue'
@@ -163,16 +164,67 @@ const { mutateAsync, isPending } = useCheckout()
 /** Precio escrito por id de línea. Vacío = el de la carta. */
 const preciosEscritos = ref<Record<number, string>>({})
 
+/*
+ * El servicio que de verdad se hizo, por línea. Agendó Semipermanente
+ * (45.000) y terminó haciéndose Semi + Rubber (55.000): se cambia aquí, con
+ * buscador, y el precio pasa al del servicio nuevo (se puede ajustar igual).
+ * El servidor le pone a la línea ese servicio y el porcentaje de comisión de
+ * quien lo hizo para ese servicio.
+ */
+const { data: services } = useServices()
+const serviciosElegidos = ref<Record<number, number>>({})
+/** La línea que tiene el buscador abierto. */
+const cambiando = ref<number | null>(null)
+
+const opcionesServicio = computed(() =>
+  (services.value ?? []).map((s) => ({ id: s.id, label: `${s.name} · ${money(s.price)}` })),
+)
+
+function servicioElegido(item: { id: number }) {
+  const id = serviciosElegidos.value[item.id]
+  return id === undefined ? null : (services.value?.find((s) => s.id === id) ?? null)
+}
+
+/** Cómo se llama lo que se hizo: el elegido, o el agendado. */
+function nombreDe(item: { id: number; service_name: string | null }): string {
+  return servicioElegido(item)?.name ?? item.service_name ?? 'Servicio'
+}
+
+/** El precio de carta de lo que se hizo. */
+function cartaDe(item: { id: number; price: number }): number {
+  return servicioElegido(item)?.price ?? item.price
+}
+
+function elegirServicio(item: { id: number; service_id: number }, serviceId: number): void {
+  const servicio = services.value?.find((s) => s.id === serviceId)
+
+  if (serviceId === item.service_id) {
+    delete serviciosElegidos.value[item.id]
+    delete preciosEscritos.value[item.id]
+  } else if (servicio) {
+    serviciosElegidos.value[item.id] = serviceId
+    preciosEscritos.value[item.id] = String(servicio.price)
+  }
+
+  cambiando.value = null
+}
+
 function precioDe(item: { id: number; price: number }): number {
   const escrito = preciosEscritos.value[item.id]
 
-  return escrito === undefined || escrito === '' ? item.price : Math.max(0, Number(escrito) || 0)
+  return escrito === undefined || escrito === '' ? cartaDe(item) : Math.max(0, Number(escrito) || 0)
 }
 
-/** Las líneas cuyo precio se apartó de la carta. */
+/** Las líneas cuyo precio se apartó de la carta (de lo que se hizo). */
 const cambiados = computed(() =>
-  (props.appointment?.items ?? []).filter((i) => precioDe(i) !== i.price),
+  (props.appointment?.items ?? []).filter((i) => precioDe(i) !== cartaDe(i)),
 )
+
+/** Lo que el servidor necesita: el precio de toda línea que no quedó en su valor agendado. */
+function preciosAEnviar(): Record<number, number> | undefined {
+  const lineas = (props.appointment?.items ?? []).filter((i) => precioDe(i) !== i.price)
+  return lineas.length ? Object.fromEntries(lineas.map((i) => [i.id, precioDe(i)])) : undefined
+}
 
 const subtotal = computed(
   () => props.appointment?.items.reduce((sum, item) => sum + precioDe(item), 0) ?? 0,
@@ -350,6 +402,8 @@ watch(open, (isOpen) => {
     // Los precios vuelven a los de la carta: lo que se escribió para otra
     // cita no puede quedar colgado en ésta.
     preciosEscritos.value = {}
+    serviciosElegidos.value = {}
+    cambiando.value = null
     // Cada cita decide de nuevo: el silencio de la anterior no se hereda.
     silent.value = false
   }
@@ -381,9 +435,7 @@ async function cotizar(): Promise<void> {
       `/appointments/${props.appointment.id}/checkout/quote`,
       {
         discount_amount: discountMode.value === 0 ? undefined : discountValue.value,
-        item_prices: cambiados.value.length
-          ? Object.fromEntries(cambiados.value.map((i) => [i.id, precioDe(i)]))
-          : undefined,
+        item_prices: preciosAEnviar(),
         loyalty_reward_id: premioElegido.value ?? undefined,
       },
     )
@@ -411,6 +463,7 @@ watch(
     discount.value,
     premioElegido.value,
     JSON.stringify(preciosEscritos.value),
+    JSON.stringify(serviciosElegidos.value),
   ],
   () => {
     if (!open.value) {
@@ -474,8 +527,9 @@ async function submit(): Promise<void> {
       discount_amount: discountValue.value || undefined,
       // Solo las que de verdad cambiaron: mandar todas obligaría al servidor
       // a distinguir "lo escribí igual" de "no lo toqué".
-      item_prices: cambiados.value.length
-        ? Object.fromEntries(cambiados.value.map((i) => [i.id, precioDe(i)]))
+      item_prices: preciosAEnviar(),
+      item_services: Object.keys(serviciosElegidos.value).length
+        ? { ...serviciosElegidos.value }
         : undefined,
       discount_reason:
         discountReason.value.trim() ||
@@ -702,21 +756,50 @@ async function submit(): Promise<void> {
           class="flex items-center gap-3 border-b border-slate-50 py-2 last:border-0"
         >
           <span class="min-w-0 flex-1">
-            <span class="block truncate text-sm text-slate-800">{{ item.service_name }}</span>
+            <span class="block truncate text-sm text-slate-800">
+              {{ nombreDe(item) }}
+              <span v-if="servicioElegido(item)" class="text-xs text-amber-700">
+                · agendado {{ item.service_name }}
+              </span>
+            </span>
             <span class="block text-xs text-slate-500">
               {{ item.resource_name }}
-              <span v-if="precioDe(item) !== item.price"> · carta {{ money(item.price) }} </span>
+              <span v-if="precioDe(item) !== cartaDe(item)">
+                · carta {{ money(cartaDe(item)) }}
+              </span>
+              ·
+              <button
+                type="button"
+                class="text-indigo-600 underline decoration-dotted"
+                :disabled="isPending"
+                @click="cambiando = cambiando === item.id ? null : item.id"
+              >
+                {{ cambiando === item.id ? 'Listo' : 'Cambiar servicio' }}
+              </button>
+            </span>
+            <!-- ¿Qué se hizo de verdad? Con buscador, los más pedidos primero. -->
+            <span v-if="cambiando === item.id" class="mt-2 block">
+              <NxSelect
+                :model-value="serviciosElegidos[item.id] ?? item.service_id"
+                :options="opcionesServicio"
+                option-label="label"
+                option-value="id"
+                label="¿Qué se hizo?"
+                filter
+                :disabled="isPending"
+                @update:model-value="(v) => elegirServicio(item, Number(v))"
+              />
             </span>
           </span>
 
           <input
-            :value="preciosEscritos[item.id] ?? item.price"
+            :value="preciosEscritos[item.id] ?? cartaDe(item)"
             type="number"
             inputmode="numeric"
             min="0"
             class="w-28 rounded-md border px-2 py-1.5 text-right text-sm tabular-nums"
             :class="
-              precioDe(item) !== item.price
+              precioDe(item) !== cartaDe(item)
                 ? 'border-amber-400 bg-amber-50 text-amber-900'
                 : 'border-slate-200'
             "

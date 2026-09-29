@@ -174,6 +174,8 @@ export interface CheckoutPayload {
    * "lo escribí igual" de "no lo toqué".
    */
   item_prices?: Record<number, number>
+  /** El servicio que de verdad se hizo, por línea, si no fue el agendado. */
+  item_services?: Record<number, number>
   /** Cobrar sin mandarle el gracias a la clienta (solo el admin). */
   silent?: boolean
 }
