@@ -229,7 +229,11 @@ const columns = computed(() => {
     // Unida en la vista general (y siempre en el teléfono) mientras no haya
     // filtro: con una persona elegida, su columna normal, que sí deja
     // agendar tocando un hueco.
-    if ((enTelefono.value || modo.value === 'general') && filtroPersona.value === null && columnaUnida.value) {
+    if (
+      (enTelefono.value || modo.value === 'general') &&
+      filtroPersona.value === null &&
+      columnaUnida.value
+    ) {
       return [columnaUnida.value]
     }
 
@@ -239,7 +243,10 @@ const columns = computed(() => {
       key: resource.id,
       label: resource.name,
       sublabel: `${resource.appointments.length}`,
-      color: colorDePersona(resource.color, todas.findIndex((r) => r.id === resource.id)),
+      color: colorDePersona(
+        resource.color,
+        todas.findIndex((r) => r.id === resource.id),
+      ),
       resource,
       date: day.date,
     }))
@@ -376,6 +383,11 @@ function onCancelled(): void {
   notify('Cita cancelada. El horario vuelve a estar libre.', 'success')
 }
 
+function onMoved(): void {
+  toCheckout.value = null
+  notify('Cita reagendada.', 'success')
+}
+
 function onDeleted(): void {
   toCheckout.value = null
   notify('Cita eliminada. No se le avisó a nadie.', 'success')
@@ -492,7 +504,8 @@ function onOpen(appointment: GridAppointment): void {
     -->
     <div
       v-if="
-        staff.length > 1 && ((view === 'day' && (enTelefono || modo === 'general')) || view === 'week')
+        staff.length > 1 &&
+        ((view === 'day' && (enTelefono || modo === 'general')) || view === 'week')
       "
       class="-mx-4 mb-2 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:flex-wrap md:px-0"
     >
@@ -581,6 +594,7 @@ function onOpen(appointment: GridAppointment): void {
       @done="onCharged"
       @cancelled="onCancelled"
       @deleted="onDeleted"
+      @moved="onMoved"
     />
   </section>
 </template>

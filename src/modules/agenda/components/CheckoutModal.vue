@@ -10,6 +10,7 @@ import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 
 import IdentificarCliente from './IdentificarCliente.vue'
+import RescheduleForm from './RescheduleForm.vue'
 import LoyaltyCardPanel from './LoyaltyCardPanel.vue'
 import SinAvisar from './SinAvisar.vue'
 import StagePicker from './StagePicker.vue'
@@ -35,7 +36,7 @@ const CANALES: Record<string, string> = {
   admin: 'Agendada en el panel',
   phone: 'Agendada por teléfono',
 }
-const emit = defineEmits<{ close: []; done: []; cancelled: []; deleted: [] }>()
+const emit = defineEmits<{ close: []; done: []; cancelled: []; deleted: []; moved: [] }>()
 
 const { mutateAsync: cancelMutation } = useCancelAppointment()
 
@@ -92,6 +93,22 @@ async function cancelAppointment(): Promise<void> {
 
 const auth = useAuthStore()
 const open = computed(() => props.appointment !== null)
+
+/** «Reagendar»: día, hora, con quién o servicio. Solo antes de cobrarla. */
+const reagendando = ref(false)
+const puedeReagendar = computed(
+  () =>
+    auth.can('citas.editar') &&
+    props.appointment !== null &&
+    !props.appointment.is_paid &&
+    ['pending', 'confirmed'].includes(props.appointment.status),
+)
+watch(
+  () => props.appointment?.id,
+  () => {
+    reagendando.value = false
+  },
+)
 
 /*
 |------------------------------------------------------------------------------
@@ -626,6 +643,27 @@ async function submit(): Promise<void> {
         >
           Volver a abrirla
         </NxButton>
+      </div>
+
+      <!-- Reagendar: antes solo se podía arrastrando en el calendario, y el
+           servicio no se podía cambiar sin cancelar y volver a agendar. -->
+      <div v-if="puedeReagendar">
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-700 hover:underline"
+          :disabled="isPending"
+          @click="reagendando = !reagendando"
+        >
+          <i class="pi pi-calendar-clock text-xs" />
+          {{ reagendando ? 'No reagendar' : 'Reagendar: día, hora, con quién o servicio' }}
+        </button>
+        <RescheduleForm
+          v-if="reagendando && appointment"
+          class="mt-2"
+          :appointment="appointment"
+          :silent="silent"
+          @moved="emit('moved')"
+        />
       </div>
 
       <SinAvisar v-model="silent" :disabled="isPending" />

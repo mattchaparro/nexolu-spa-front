@@ -32,7 +32,16 @@ export interface GridAppointment {
  * del orden del equipo, así Alejandra es siempre la misma en la agenda.
  * El verde queda reservado para lo ya atendido.
  */
-const PALETA = ['#ec4899', '#8b5cf6', '#f59e0b', '#0ea5e9', '#f43f5e', '#14b8a6', '#6366f1', '#a855f7']
+const PALETA = [
+  '#ec4899',
+  '#8b5cf6',
+  '#f59e0b',
+  '#0ea5e9',
+  '#f43f5e',
+  '#14b8a6',
+  '#6366f1',
+  '#a855f7',
+]
 
 export function colorDePersona(color: string | null | undefined, indice: number): string {
   return color || PALETA[indice % PALETA.length]
@@ -105,14 +114,18 @@ export function useReschedule() {
   return useMutation({
     mutationFn: async ({
       id,
-      starts_at,
-      resource_id,
+      ...body
     }: {
       id: number
       starts_at: string
       resource_id?: number
-    }) =>
-      (await httpClient.patch(`/appointments/${id}/reschedule`, { starts_at, resource_id })).data,
+      /** «Reagendar» en la cita: también el servicio. */
+      service_id?: number
+      /** Fuera del turno (solo quien gestiona horarios). */
+      outside_schedule?: boolean
+      /** Sin avisarle a nadie (solo el admin). */
+      silent?: boolean
+    }) => (await httpClient.patch(`/appointments/${id}/reschedule`, body)).data,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agenda'] })
       queryClient.invalidateQueries({ queryKey: ['availability'] })
