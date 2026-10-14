@@ -94,6 +94,8 @@ const MENU: Array<Entry | Group> = [
         featureKey: 'promotions',
       },
       { label: 'Enséñale al bot', routeName: 'bot-knowledge', permission: 'ia.conocimiento' },
+      // Enlaces wa.me con mensaje propio (historias, biografía): quien administra.
+      { label: 'Enlaces', routeName: 'whatsapp-links', permission: 'negocio.configurar' },
       // Lo que Meta cobra por WhatsApp: solo quien administra el negocio.
       { label: 'Gasto', routeName: 'whatsapp-spend', permission: 'negocio.configurar' },
     ],

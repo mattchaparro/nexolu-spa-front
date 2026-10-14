@@ -169,6 +169,13 @@ export const routes: RouteRecordRaw[] = [
     meta: { permission: 'negocio.configurar' },
   },
   {
+    // Enlaces wa.me con mensaje propio, para historias y anuncios.
+    path: '/whatsapp/enlaces',
+    name: 'whatsapp-links',
+    component: () => import('@/modules/messages/views/WhatsappLinksView.vue'),
+    meta: { permission: 'negocio.configurar' },
+  },
+  {
     path: '/configuracion/medios-de-pago',
     name: 'payment-methods',
     component: () => import('@/modules/settings/views/PaymentMethodsView.vue'),
