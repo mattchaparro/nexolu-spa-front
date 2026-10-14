@@ -7,6 +7,8 @@ import { httpClient } from '@/services/http/client'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton } from '@/ui'
 
+import WhatsappLinks from '../components/WhatsappLinks.vue'
+
 interface PublicPagePayload {
   enabled: boolean
   slug: string
@@ -211,6 +213,8 @@ async function copyLink(url?: string): Promise<void> {
             </div>
           </div>
         </div>
+
+        <WhatsappLinks :number="form.whatsapp" :services="data.services" />
 
         <!--
           El aviso del momento. Va primero porque es lo que cambia semana a

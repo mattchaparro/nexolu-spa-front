@@ -91,6 +91,7 @@ export const KIND_LABELS: Record<string, string> = {
   confirmacion: 'Confirmación de cita',
   gracias: 'Gracias por tu visita',
   cancelacion: 'Cita cancelada',
+  reagendada: 'Cita reagendada',
   retoque: 'Recordatorio de retoque',
   equipo: 'Aviso al equipo',
   lista_espera: 'Se liberó un cupo',
