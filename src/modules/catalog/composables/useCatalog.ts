@@ -289,6 +289,81 @@ export function useSaveResourceLogin() {
   })
 }
 
+/*
+|------------------------------------------------------------------------------
+| Cambios de un día
+|------------------------------------------------------------------------------
+| El horario semanal dice cómo trabaja normalmente. Esto es lo puntual: se
+| queda hasta más tarde hoy (`extra_hours`), pidió permiso el viernes desde el
+| mediodía (`block`) o está de vacaciones varios días (`vacation`).
+*/
+
+export interface ScheduleChange {
+  id: number
+  kind: 'extra_hours' | 'block' | 'vacation'
+  /** YYYY-MM-DD del primer día y del último (iguales si es un solo día). */
+  date: string
+  end_date: string
+  all_day: boolean
+  start_time: string
+  end_time: string
+  reason: string | null
+  /** Citas que quedaron dentro de lo que se quitó: hay que reagendarlas. */
+  conflicts: Array<{
+    appointment_id: number
+    date: string | null
+    time: string | null
+    client_name: string | null
+    service_name: string | null
+  }>
+}
+
+export interface ScheduleChangePayload {
+  kind: 'extra_hours' | 'block'
+  date: string
+  end_date?: string
+  all_day?: boolean
+  start_time?: string
+  end_time?: string
+  reason?: string
+}
+
+export function useScheduleChanges(resourceId: Ref<number | null>) {
+  return useQuery({
+    queryKey: ['schedule-changes', resourceId],
+    enabled: () => resourceId.value !== null,
+    queryFn: async () =>
+      (await httpClient.get<ScheduleChange[]>(`/resources/${resourceId.value}/exceptions`)).data,
+  })
+}
+
+function invalidateAgenda(queryClient: ReturnType<typeof useQueryClient>): void {
+  queryClient.invalidateQueries({ queryKey: ['schedule-changes'] })
+  // La rejilla pinta las franjas y la disponibilidad ofrece las horas.
+  queryClient.invalidateQueries({ queryKey: ['agenda'] })
+  queryClient.invalidateQueries({ queryKey: ['availability'] })
+}
+
+export function useCreateScheduleChange() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ resourceId, ...body }: ScheduleChangePayload & { resourceId: number }) =>
+      (await httpClient.post<ScheduleChange>(`/resources/${resourceId}/exceptions`, body)).data,
+    onSuccess: () => invalidateAgenda(queryClient),
+  })
+}
+
+export function useDeleteScheduleChange() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ resourceId, id }: { resourceId: number; id: number }) =>
+      (await httpClient.delete(`/resources/${resourceId}/exceptions/${id}`)).data,
+    onSuccess: () => invalidateAgenda(queryClient),
+  })
+}
+
 export function useSaveSchedules() {
   const queryClient = useQueryClient()
 

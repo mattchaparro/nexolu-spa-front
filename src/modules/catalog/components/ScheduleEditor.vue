@@ -5,6 +5,7 @@ import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxModal } from '@/ui'
 
 import BreaksEditor from './BreaksEditor.vue'
+import ScheduleChangesEditor from './ScheduleChangesEditor.vue'
 
 import {
   useSaveSchedules,
@@ -105,8 +106,8 @@ async function submit(): Promise<void> {
   >
     <div class="flex flex-col gap-4">
       <p class="text-sm text-slate-500">
-        Marca los días que trabaja y su franja. Las vacaciones y los bloqueos de un día puntual se
-        manejan aparte, sin tocar este horario.
+        Marca los días que trabaja y su franja: es su horario de toda la semana. Para algo de un solo
+        día (se queda más tarde, un permiso, vacaciones) usa «Cambios de un día», más abajo.
       </p>
 
       <div class="divide-y divide-slate-100 rounded-md border border-slate-200">
@@ -150,6 +151,11 @@ async function submit(): Promise<void> {
       </button>
 
       <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+
+      <!-- Lo puntual de un día guarda solo y no toca el horario de la semana. -->
+      <div v-if="resource" class="border-t border-slate-100 pt-4">
+        <ScheduleChangesEditor :resource-id="resource.id" :weekly="existing ?? []" />
+      </div>
 
       <!-- Los descansos guardan solos, aparte del horario: son dos decisiones
            distintas y mezclarlas en un botón obligaría a reenviar la semana
