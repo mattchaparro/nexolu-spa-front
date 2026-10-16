@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
+import { useSystemAlert } from '@/composables/useSystemAlert'
 import { extractErrorMessage } from '@/utils/extractErrorMessage'
 import { NxButton, NxInput, NxModal, NxSelect } from '@/ui'
 
 import { useServiceCategories } from '@/modules/settings/composables/useCampaigns'
 import { useLocations } from '@/modules/settings/composables/useLocations'
 
-import { useSaveResource, type TeamResource } from '../composables/useCatalog'
+import { useSaveResource, useSaveResourceLogin, type TeamResource } from '../composables/useCatalog'
 
 const props = defineProps<{
   resource: TeamResource | null
@@ -19,6 +20,8 @@ const props = defineProps<{
 const emit = defineEmits<{ close: []; saved: [] }>()
 
 const { mutateAsync, isPending } = useSaveResource()
+const { mutateAsync: saveLogin, isPending: savingLogin } = useSaveResourceLogin()
+const { notify } = useSystemAlert()
 
 const TYPES = [
   { value: 'staff', label: 'Persona del equipo' },
@@ -103,7 +106,8 @@ watch(
     name.value = r?.name ?? ''
     lastName.value = ''
     color.value = r?.color ?? '#4f46e5'
-    email.value = ''
+    // Al editar, el correo con el que ya entra; la contraseña nunca se muestra.
+    email.value = r?.login_email ?? ''
     password.value = ''
     phone.value = r?.phone ?? ''
     role.value = 'staff'
@@ -125,6 +129,36 @@ function onFile(event: Event): void {
   const file = (event.target as HTMLInputElement).files?.[0] ?? null
   photo.value = file
   preview.value = file ? URL.createObjectURL(file) : (props.resource?.photo_url ?? null)
+}
+
+/**
+ * Guardar el acceso (correo / contraseña) de quien ya está en el equipo.
+ *
+ * Aparte del botón principal: cambiar la contraseña de alguien no tiene por
+ * qué tocar su foto, su porcentaje ni su sede, y viceversa.
+ */
+async function submitLogin(): Promise<void> {
+  error.value = null
+
+  if (!props.resource) return
+
+  try {
+    await saveLogin({
+      id: props.resource.id,
+      email: email.value.trim(),
+      ...(password.value ? { password: password.value } : {}),
+      ...(props.resource.user_id === null ? { role: role.value } : {}),
+    })
+    password.value = ''
+    notify(
+      props.resource.user_id === null
+        ? 'Listo: ya puede entrar con ese correo y esa contraseña.'
+        : 'Acceso actualizado.',
+      'success',
+    )
+  } catch (e) {
+    error.value = extractErrorMessage(e, 'No pudimos guardar el acceso.')
+  }
 }
 
 async function submit(): Promise<void> {
@@ -403,6 +437,60 @@ async function submit(): Promise<void> {
         <p class="mt-2 text-xs text-slate-500">
           Sin correo, la persona aparece en la agenda pero no entra al sistema.
         </p>
+      </div>
+
+      <!-- Quien ya está en el equipo: ver con qué correo entra y cambiarle la
+           contraseña si la olvidó, o darle acceso si no tenía. -->
+      <div
+        v-if="isEditing && isPerson"
+        class="rounded-md border border-slate-200 p-3"
+        data-testid="staff-login"
+      >
+        <p class="mb-3 text-sm font-medium text-slate-700">
+          {{ resource?.user_id === null ? 'Darle acceso al sistema' : 'Acceso al sistema' }}
+        </p>
+
+        <div class="flex flex-col gap-3">
+          <NxInput v-model="email" type="email" label="Correo" :disabled="savingLogin" />
+          <NxInput
+            v-model="password"
+            type="password"
+            :label="resource?.user_id === null ? 'Contraseña' : 'Nueva contraseña'"
+            :disabled="savingLogin"
+          />
+          <NxSelect
+            v-if="resource?.user_id === null"
+            v-model="role"
+            :options="ROLES"
+            option-label="label"
+            option-value="value"
+            label="Puede hacer"
+            :disabled="savingLogin"
+          />
+        </div>
+
+        <p class="mt-2 text-xs text-slate-500">
+          <template v-if="resource?.user_id === null">
+            Hoy aparece en la agenda pero no puede entrar. Escribe un correo y una contraseña de al
+            menos 8 caracteres.
+          </template>
+          <template v-else>
+            La contraseña actual no se puede ver. Escribe una nueva (mínimo 8 caracteres) solo si
+            quieres cambiarla: se cierran sus sesiones abiertas.
+          </template>
+        </p>
+
+        <div class="mt-3 flex justify-end">
+          <NxButton
+            size="sm"
+            variant="secondary"
+            :loading="savingLogin"
+            :disabled="!email.trim() || (resource?.user_id === null && password.length < 8)"
+            @click="submitLogin"
+          >
+            Guardar acceso
+          </NxButton>
+        </div>
       </div>
 
       <p v-if="error" class="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>

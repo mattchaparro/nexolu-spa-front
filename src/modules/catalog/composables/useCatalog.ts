@@ -69,6 +69,8 @@ export interface TeamResource {
   color: string | null
   photo_url: string | null
   user_id: number | null
+  /** Con qué correo entra. Solo lo trae el servidor a quien administra al equipo. */
+  login_email?: string | null
   is_bookable_online: boolean
   is_active: boolean
   /** Su porcentaje general. Nulo = cada servicio decide. */
@@ -263,6 +265,27 @@ export function useSaveResource() {
       queryClient.invalidateQueries({ queryKey: ['resources'] })
       queryClient.invalidateQueries({ queryKey: ['availability'] })
     },
+  })
+}
+
+/**
+ * El acceso de una persona: su correo y, si se quiere, una contraseña nueva.
+ * Sin cuenta todavía, también la crea (con `role`).
+ */
+export function useSaveResourceLogin() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      ...body
+    }: {
+      id: number
+      email: string
+      password?: string
+      role?: string
+    }) => (await httpClient.put<{ login_email: string }>(`/resources/${id}/login`, body)).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['resources'] }),
   })
 }
 
