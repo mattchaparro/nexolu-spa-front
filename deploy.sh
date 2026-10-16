@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Deploy de nexolu-spa-front al droplet legacy `nexolu`.
+# Deploy de nexolu-spa-front al droplet `nexolu-pos-prod` (174.138.42.118).
+# Hasta el 2026-10-15 vivia en el legacy `nexolu`; ahi ya NO se despliega.
 #
 #   bash deploy.sh              build local + subida + swap atomico
 #   bash deploy.sh rollback     vuelve a la release anterior, sin rebuild
@@ -26,7 +27,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-SERVIDOR="${SPA_FRONT_SERVER:-root@134.122.116.201}"
+SERVIDOR="${SPA_FRONT_SERVER:-root@174.138.42.118}"
 APP_DIR="${SPA_FRONT_APP_DIR:-/opt/nexolu/nexolu-spa-front}"
 URL="${SPA_FRONT_URL:-https://agenda.nexolu.co}"
 RETENER="${RETENER:-3}"
