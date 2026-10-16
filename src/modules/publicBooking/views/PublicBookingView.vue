@@ -43,17 +43,48 @@ const sedes = computed(() => page.value?.locations ?? [])
  */
 const debeElegirSede = computed(() => sedes.value.length > 1 && page.value?.location === null)
 
-function irASede(sedeSlug: string): void {
+/*
+ * Cambiar de sede conserva el resto del enlace: el `?c=` de la clienta y el
+ * servicio que traía. Con varias sedes la reserva sólo aparece DESPUÉS de
+ * elegir local, así que perder la consulta aquí era perder la preselección.
+ */
+function irASede(sedeSlug: string | null): void {
   router.replace({
     name: 'public-booking',
-    params: { businessSlug: slug.value, locationSlug: sedeSlug },
+    params: sedeSlug
+      ? { businessSlug: slug.value, locationSlug: sedeSlug }
+      : { businessSlug: slug.value },
+    query: route.query,
   })
 }
 
-/** Servicio elegido desde la lista de arriba, para saltar directo al paso 2. */
-const preselected = ref<number | null>(null)
-/** Lo mismo para un combo. */
-const preselectedPackage = ref<number | null>(null)
+/** Un id entero positivo de la consulta, o null si no lo es. */
+function queryId(value: unknown): number | null {
+  const id = Number(Array.isArray(value) ? value[0] : value)
+  return Number.isInteger(id) && id > 0 ? id : null
+}
+
+/*
+ * El servicio o el combo que trae el enlace: `?servicio=83` o `?paquete=11`.
+ *
+ * Es el botón "Reservar este servicio" del sitio del negocio: quien llega desde
+ * Google a la ficha de un servicio no tiene por qué volver a buscarlo. Sólo
+ * cuenta si está en el catálogo público de esta sede — ahí ya vienen únicamente
+ * los activos y reservables en línea —; un id viejo o de otro local se ignora y
+ * la agenda abre normal, en el paso 1.
+ */
+const preselected = computed(() => {
+  const id = queryId(route.query.servicio)
+  return id !== null && page.value?.services.some((s) => s.id === id) ? id : null
+})
+
+/** Lo mismo para un combo. Si el enlace trae los dos, gana el servicio. */
+const preselectedPackage = computed(() => {
+  const id = queryId(route.query.paquete)
+  return preselected.value === null && id !== null && page.value?.packages.some((p) => p.id === id)
+    ? id
+    : null
+})
 
 const verTodos = ref(0)
 
@@ -208,7 +239,7 @@ const groupedHours = computed(() => {
             <button
               type="button"
               class="ml-auto underline"
-              @click="router.replace({ name: 'public-booking', params: { businessSlug: slug } })"
+              @click="irASede(null)"
             >
               Cambiar de sede
             </button>
